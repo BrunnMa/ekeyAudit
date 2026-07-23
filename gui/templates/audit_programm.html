@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Auditprogramm - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Auditprogramm</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">{% if edit_programm %}Auditprogramm bearbeiten{% else %}Neues Auditprogramm anlegen{% endif %}</h2>
+    <form method="post" action="{{ url_for('gui.audit_programm') }}">
+        {% if edit_programm %}
+        <input type="hidden" name="programm_id" value="{{ edit_programm.id }}">
+        {% endif %}
+
+        <!-- Zeile 1: Status, Audittyp, Norm, Audit-Jahr -->
+        <div class="ekey-form-flexrow">
+            <div class="ekey-form-row">
+                <label for="auditStatus">Status</label>
+                <select id="auditStatus" name="auditStatus">
+                    {% for s in audit_status %}
+                    <option value="{{ s.id }}" {% if edit_programm and edit_programm.auditStatus == s.id %}selected{% endif %}>{{ s.auditStatus }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="auditTyp">Audit-Typ</label>
+                <select id="auditTyp" name="auditTyp">
+                    {% for t in audit_typen %}
+                    <option value="{{ t.auditTyp }}" {% if edit_programm and edit_programm.auditTyp == t.auditTyp %}selected{% endif %}>{{ t.auditTyp }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="norm">Norm</label>
+                <input type="text" id="norm" name="norm" value="{{ edit_programm.norm if edit_programm else 'ISO9001:2015' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="auditJahr">Audit-Jahr</label>
+                <input type="number" id="auditJahr" name="auditJahr" value="{{ edit_programm.auditJahr if edit_programm else 2026 }}">
+            </div>
+        </div>
+
+        <!-- Zeile 2+: Auditor(en) -->
+        <div class="ekey-form-row" style="margin-bottom: 10px;">
+            <label>Auditor(en)</label>
+            <div id="auditorRows">
+                {% if edit_programm and edit_programm.auditor %}
+                    {% for a in edit_programm.auditor.split(';') %}
+                    <div class="ekey-auditor-row">
+                        <input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off"
+                               placeholder="Namen eingeben zum Suchen..." value="{{ a.strip() }}">
+                        <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this)">Entfernen</button>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="ekey-auditor-row">
+                        <input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off"
+                               placeholder="Namen eingeben zum Suchen...">
+                        <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this)">Entfernen</button>
+                    </div>
+                {% endif %}
+            </div>
+            <datalist id="mitarbeiter_liste">
+                {% for m in mitarbeiter %}
+                <option value="{{ m.name }}">{% if m.abteilung %}{{ m.abteilung }}{% endif %}</option>
+                {% endfor %}
+            </datalist>
+            <div class="ekey-form-actions">
+                <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyAddAuditorRow()">+ Auditor hinzufuegen</button>
+            </div>
+            <span class="ekey-hint">
+                {% if not mitarbeiter %}
+                    Keine Mitarbeiter hinterlegt - siehe Konfiguration &gt; Mitarbeiter (manuell anlegen oder per AD synchronisieren).
+                {% endif %}
+            </span>
+        </div>
+
+        <!-- Zeile 3: frei -->
+        <div class="ekey-form-spacer"></div>
+
+        <!-- Zeile 4: Unternehmen, Standort -->
+        <div class="ekey-form-flexrow">
+            <div class="ekey-form-row">
+                <label for="unternehmen">Unternehmen</label>
+                <input type="text" id="unternehmen" name="unternehmen" value="{{ edit_programm.unternehmen if edit_programm else 'ekey biometric systems GmbH' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="standort">Standort</label>
+                <input type="text" id="standort" name="standort" value="{{ edit_programm.standort if edit_programm else '' }}">
+            </div>
+        </div>
+
+        <!-- Zeile 5: Start-Datum, End-Datum -->
+        <div class="ekey-form-flexrow">
+            <div class="ekey-form-row">
+                <label for="startDatum">Start-Datum</label>
+                <input type="date" id="startDatum" name="startDatum" value="{{ edit_programm.startDatum if edit_programm else '' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="endDatum">End-Datum</label>
+                <input type="date" id="endDatum" name="endDatum" value="{{ edit_programm.endDatum if edit_programm else '' }}">
+            </div>
+        </div>
+
+        <!-- Zeile 6: horizontale Linie -->
+        <hr class="ekey-form-hr">
+
+        <!-- Zeile 7+8: links Beauftragt durch/am, rechts Info zur Beauftragung -->
+        <div class="ekey-form-split">
+            <div class="ekey-form-split-col">
+                <div class="ekey-form-row">
+                    <label for="beauftragt">Beauftragt durch</label>
+                    <input type="text" id="beauftragt" name="beauftragt" value="{{ edit_programm.beauftragt if edit_programm else '' }}">
+                </div>
+                <div class="ekey-form-row">
+                    <label for="beauftragtAm">Beauftragt am</label>
+                    <input type="date" id="beauftragtAm" name="beauftragtAm" value="{{ edit_programm.beauftragtAm if edit_programm else '' }}">
+                </div>
+            </div>
+            <div class="ekey-form-split-col">
+                <div class="ekey-form-row ekey-form-row-grow">
+                    <label for="beauftragtInfo">Info zur Beauftragung</label>
+                    <textarea id="beauftragtInfo" name="beauftragtInfo">{{ edit_programm.beauftragtInfo if edit_programm else '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            {% if edit_programm %}
+            <a href="{{ url_for('gui.audit_programm') }}" class="ekey-btn">Abbrechen</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if edit_programm %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Auditziele zu Programm #{{ edit_programm.id }}</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Ziel</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for z in ziele %}
+            <tr>
+                <td>{{ z.auditZiel }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.audit_programm_ziel_delete', ziel_id=z.id) }}" style="display:inline">
+                        <input type="hidden" name="programm_id" value="{{ edit_programm.id }}">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="2">Keine Auditziele erfasst.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <form method="post" action="{{ url_for('gui.audit_programm_ziel_add', programm_id=edit_programm.id) }}" class="ekey-inline-form">
+        <input type="text" name="auditZiel" placeholder="Neues Auditziel" required>
+        <button type="submit" class="ekey-btn">Ziel hinzufuegen</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Vorhandene Auditprogramme</h2>
+    <table class="ekey-table">
+        <thead>
+        <tr>
+            <th>Jahr</th><th>Typ</th><th>Norm</th><th>Auditor</th><th>Unternehmen</th>
+            <th>Status</th><th>Start</th><th>Ende</th><th>Aktion</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for p in programme %}
+            <tr>
+                <td>{{ p.auditJahr }}</td>
+                <td>{{ p.auditTyp }}</td>
+                <td>{{ p.norm }}</td>
+                <td>{{ p.auditor }}</td>
+                <td>{{ p.unternehmen }}</td>
+                <td>{{ p.statusName }}</td>
+                <td>{{ p.startDatum }}</td>
+                <td>{{ p.endDatum }}</td>
+                <td><a href="{{ url_for('gui.audit_programm', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="9">Keine Auditprogramme vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Interviews - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Audit durchfuehren - Interviews</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Alle erfassten Interviews</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Jahr</th><th>Plan</th><th>Frage</th><th>Auditor</th><th>Inhalt</th></tr></thead>
+        <tbody>
+        {% for iv in interviews %}
+            <tr>
+                <td>{{ iv.auditJahr }}</td>
+                <td>#{{ iv.planId }}</td>
+                <td>{{ iv.auditFrage }}</td>
+                <td>{{ iv.nameAuditor }}</td>
+                <td>{{ iv.inhalt }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">Keine Interviews erfasst.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

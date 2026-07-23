@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Abweichungen - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Auditabweichungen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Filter</h2>
+    <form method="get" action="{{ url_for('gui.abweichungen') }}" class="ekey-inline-form">
+        <select name="status" onchange="this.form.submit()">
+            <option value="">Alle Status</option>
+            {% for s in audit_status %}
+            <option value="{{ s.id }}" {% if status_filter and status_filter|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="ekey-btn">Filtern</button>
+    </form>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Abweichungen</h2>
+    <table class="ekey-table">
+        <thead>
+        <tr><th>#</th><th>Abweichung</th><th>Prozess/Frage</th><th>Status</th><th>Eigner</th><th>Erfasst am</th><th>Massnahme hinzufuegen</th></tr>
+        </thead>
+        <tbody>
+        {% for a in abweichungen %}
+            <tr>
+                <td>{{ a.id }}</td>
+                <td>{{ a.abweichung }}</td>
+                <td>{{ a.auditFrage }}</td>
+                <td>{{ a.statusName }}</td>
+                <td>{{ a.nameEigner }}</td>
+                <td>{{ a.datumErfasst }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.abweichung_massnahme_add', abweichung_id=a.id) }}" class="ekey-inline-form">
+                        <input type="text" name="massnahme" placeholder="Massnahme" required>
+                        <input type="date" name="datumMassnahme">
+                        <input type="text" name="nameEigner" placeholder="Eigner" required>
+                        <button type="submit" class="ekey-btn ekey-btn-small">Massnahme anlegen</button>
+                    </form>
+                    <a href="{{ url_for('gui.massnahmen') }}" class="ekey-btn ekey-btn-small">Massnahmen ansehen</a>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="7">Keine Abweichungen vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

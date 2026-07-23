@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keine Datenbankverbindung - {{ app_title }}</title>
+<link rel="stylesheet" href="{{ url_for('gui.static', filename='css/style.css') }}">
+</head>
+<body>
+<header class="ekey-header">
+    <div class="ekey-header-left">
+        <img src="{{ url_for('gui.static', filename='images/ekey_logo.jpg') }}" alt="ekey" class="ekey-logo">
+    </div>
+    <div class="ekey-header-title">{{ app_title }}</div>
+    <div class="ekey-header-right"></div>
+</header>
+
+<div class="ekey-body">
+    <main class="ekey-content" style="width: 100%;">
+        <div class="ekey-panel" style="max-width: 700px; margin: 40px auto;">
+            <h1 class="ekey-h1" style="color: var(--ekey-error);">Keine Verbindung zur Datenbank</h1>
+            <p>
+                Die Anwendung kann derzeit keine Verbindung zum konfigurierten Datenbank-Backend
+                <strong>"{{ backend }}"</strong>
+                {% if backend == 'mssql' %}
+                (Server <strong>{{ server }}</strong>, Datenbank <strong>{{ database }}</strong>)
+                {% endif %}
+                herstellen. Es werden aktuell <strong>keine Dateneingaben gespeichert</strong> - es gibt
+                bewusst keinen automatischen Fallback auf eine lokale Datei, damit Audit-Daten nicht in
+                zwei getrennten Datenbanken landen.
+            </p>
+            <div class="ekey-panel" style="background: var(--ekey-error-bg); border-color: var(--ekey-error);">
+                <strong>Fehlermeldung:</strong>
+                <p class="ekey-muted" style="word-break: break-word;">{{ error }}</p>
+            </div>
+            <h2 class="ekey-h2">Was Sie pruefen koennen</h2>
+            <p>
+                VPN-/Netzwerkverbindung zum Server {{ server }} pruefen, ob der SQL-Server-Dienst laeuft,
+                ob der ODBC-Treiber ("{{ driver }}") auf diesem Rechner installiert ist, und ob Ihr
+                Windows-Benutzerkonto Zugriff auf die Datenbank "{{ database }}" hat. Anschliessend
+                diese Seite neu laden oder die Anwendung neu starten.
+            </p>
+            <div class="ekey-form-actions">
+                <a href="{{ url_for('gui.index') }}" class="ekey-btn ekey-btn-primary">Erneut versuchen</a>
+            </div>
+        </div>
+    </main>
+</div>
+
+<footer class="ekey-footer">
+    <a href="https://www.ekey.net" target="_blank" rel="noopener">www.ekey.net</a>
+</footer>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Berichte - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Berichte</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">PDF-Auditbericht erzeugen</h2>
+    <p class="ekey-muted">Waehlen Sie ein Auditprogramm aus, um einen PDF-Bericht mit Programmdaten, Zielen,
+        Plaenen, Proofs, Ergebnissen, Abweichungen und Massnahmen zu erzeugen.</p>
+    <form method="post" action="{{ url_for('gui.berichte') }}">
+        <div class="ekey-form-row">
+            <label for="programm_id">Auditprogramm</label>
+            <select id="programm_id" name="programm_id" required>
+                <option value="">-- auswaehlen --</option>
+                {% for p in programme %}
+                <option value="{{ p.id }}">{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">PDF erzeugen und herunterladen</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

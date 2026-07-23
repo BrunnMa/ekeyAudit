@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Massnahmen - {{ app_title }}{% endblock %}
+{% block content %}
+
+{% if detail_mode %}
+    <h1 class="ekey-h1">Massnahme #{{ massnahme.id }}</h1>
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Details</h2>
+        <p><strong>Massnahme:</strong> {{ massnahme.massnahme }}</p>
+        <p><strong>Termin:</strong> {{ massnahme.datumMassnahme }} | <strong>Eigner:</strong> {{ massnahme.nameEigner }}</p>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Statusverlauf</h2>
+        <table class="ekey-table">
+            <thead><tr><th>Datum</th><th>Von</th><th>Nach</th><th>Name</th><th>Info</th></tr></thead>
+            <tbody>
+            {% for v in verlauf %}
+                <tr>
+                    <td>{{ v.statusDatum }}</td>
+                    <td>{{ v.statusAltName or '-' }}</td>
+                    <td>{{ v.statusNeuName }}</td>
+                    <td>{{ v.statusName }}</td>
+                    <td>{{ v.infoStatus }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">Kein Statusverlauf vorhanden.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Neuen Status erfassen</h2>
+        <form method="post" action="{{ url_for('gui.massnahme_status_add', massnahme_id=massnahme.id) }}">
+            <div class="ekey-form-grid">
+                <div class="ekey-form-row">
+                    <label for="status">Bisheriger Status</label>
+                    <select id="status" name="status">
+                        <option value="">-</option>
+                        {% for s in audit_status %}
+                        <option value="{{ s.id }}">{{ s.auditStatus }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="statusNeu">Neuer Status</label>
+                    <select id="statusNeu" name="statusNeu" required>
+                        {% for s in audit_status %}
+                        <option value="{{ s.id }}">{{ s.auditStatus }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="statusDatum">Datum</label>
+                    <input type="date" id="statusDatum" name="statusDatum">
+                </div>
+                <div class="ekey-form-row">
+                    <label for="statusName">Name Mitarbeiter</label>
+                    <input type="text" id="statusName" name="statusName">
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="infoStatus">Info</label>
+                    <textarea id="infoStatus" name="infoStatus" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Status speichern</button>
+            </div>
+        </form>
+    </div>
+    <a href="{{ url_for('gui.massnahmen') }}" class="ekey-btn">Zurueck zur Liste</a>
+
+{% else %}
+    <h1 class="ekey-h1">Massnahmen</h1>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Filter</h2>
+        <form method="get" action="{{ url_for('gui.massnahmen') }}" class="ekey-inline-form">
+            <select name="status" onchange="this.form.submit()">
+                <option value="">Alle Status</option>
+                {% for s in audit_status %}
+                <option value="{{ s.id }}" {% if status_filter and status_filter|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="ekey-btn">Filtern</button>
+        </form>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Alle Massnahmen</h2>
+        <table class="ekey-table">
+            <thead><tr><th>#</th><th>Massnahme</th><th>Abweichung</th><th>Termin</th><th>Eigner</th><th>Aktueller Status</th><th>Aktion</th></tr></thead>
+            <tbody>
+            {% for m in massnahmen %}
+                <tr>
+                    <td>{{ m.id }}</td>
+                    <td>{{ m.massnahme }}</td>
+                    <td>{{ m.abweichung }}</td>
+                    <td>{{ m.datumMassnahme }}</td>
+                    <td>{{ m.nameEigner }}</td>
+                    <td>{{ m.aktuellerStatusName }}</td>
+                    <td><a href="{{ url_for('gui.massnahme_detail', massnahme_id=m.id) }}" class="ekey-btn ekey-btn-small">Verlauf / Status aendern</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="7">Keine Massnahmen vorhanden.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}

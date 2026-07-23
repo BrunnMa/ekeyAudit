@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Checklisten - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Audit governance - Checklisten anlegen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">{% if edit_checkliste %}Checkliste bearbeiten{% else %}Neue Checkliste anlegen{% endif %}</h2>
+    <form method="post" action="{{ url_for('gui.governance_checklisten') }}">
+        {% if edit_checkliste %}<input type="hidden" name="checkliste_id" value="{{ edit_checkliste.id }}">{% endif %}
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row">
+                <label for="bezeichnung">Bezeichnung</label>
+                <input type="text" id="bezeichnung" name="bezeichnung" value="{{ edit_checkliste.bezeichnung if edit_checkliste else '' }}" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="prozessId">Prozess</label>
+                <select id="prozessId" name="prozessId">
+                    <option value="">-- auswaehlen --</option>
+                    {% for pr in prozesse %}
+                    <option value="{{ pr.id }}" {% if edit_checkliste and edit_checkliste.prozessId == pr.id %}selected{% endif %}>{{ pr.processName }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="link">Link</label>
+                <input type="text" id="link" name="link" value="{{ edit_checkliste.link if edit_checkliste else '' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="eigner">Eigner</label>
+                <input type="text" id="eigner" name="eigner" value="{{ edit_checkliste.eigner if edit_checkliste else '' }}">
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+        </div>
+    </form>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Vorhandene Checklisten</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Bezeichnung</th><th>Prozess</th><th>Eigner</th><th>Proofs</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for c in checklisten %}
+            <tr>
+                <td>{{ c.bezeichnung }}</td>
+                <td>{{ c.prozessName }}</td>
+                <td>{{ c.eigner }}</td>
+                <td><a href="{{ url_for('gui.governance_proofs', checkliste_id=c.id) }}" class="ekey-btn ekey-btn-small">Proofs verwalten</a></td>
+                <td>
+                    <a href="{{ url_for('gui.governance_checklisten', edit=c.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <form method="post" action="{{ url_for('gui.governance_checkliste_delete', checkliste_id=c.id) }}" style="display:inline">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">Keine Checklisten vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

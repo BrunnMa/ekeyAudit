@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Prozesse - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Audit governance - Prozesse erfassen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">{% if edit_prozess %}Prozess bearbeiten{% else %}Neuen Prozess anlegen{% endif %}</h2>
+    <form method="post" action="{{ url_for('gui.governance_prozesse') }}">
+        {% if edit_prozess %}<input type="hidden" name="prozess_id" value="{{ edit_prozess.id }}">{% endif %}
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row">
+                <label for="processName">Prozessname</label>
+                <input type="text" id="processName" name="processName" value="{{ edit_prozess.processName if edit_prozess else '' }}" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="processNumber">Prozessnummer</label>
+                <input type="text" id="processNumber" name="processNumber" value="{{ edit_prozess.processNumber if edit_prozess else '' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="processOwner">Prozessverantwortlicher</label>
+                <input type="text" id="processOwner" name="processOwner" list="mitarbeiter_liste" autocomplete="off"
+                       placeholder="Namen eingeben zum Suchen..."
+                       value="{{ edit_prozess.processOwner if edit_prozess else '' }}">
+                <datalist id="mitarbeiter_liste">
+                    {% for m in mitarbeiter %}
+                    <option value="{{ m.name }}">{% if m.abteilung %}{{ m.abteilung }}{% endif %}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="ekey-form-row">
+                <label for="fachbereich">Fachbereich</label>
+                <select id="fachbereich" name="fachbereich">
+                    <option value="">-- auswaehlen --</option>
+                    {% for fb in fachbereiche %}
+                    <option value="{{ fb.id }}" {% if edit_prozess and edit_prozess.fachbereich == fb.id %}selected{% endif %}>{{ fb.fachbereich }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="link">Link</label>
+                <input type="text" id="link" name="link" value="{{ edit_prozess.link if edit_prozess else '' }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="normKapitel">Norm-Kapitel</label>
+                <input type="text" id="normKapitel" name="normKapitel" value="{{ edit_prozess.normKapitel if edit_prozess else '' }}">
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="info">Info</label>
+                <textarea id="info" name="info" rows="2">{{ edit_prozess.info if edit_prozess else '' }}</textarea>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            {% if edit_prozess %}
+            <a href="{{ url_for('gui.governance_prozesse') }}" class="ekey-btn">Abbrechen</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Vorhandene Prozesse</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Name</th><th>Nummer</th><th>Owner</th><th>Fachbereich</th><th>Norm-Kapitel</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for p in prozesse %}
+            <tr>
+                <td>{{ p.processName }}</td>
+                <td>{{ p.processNumber }}</td>
+                <td>{{ p.processOwner }}</td>
+                <td>{{ p.fachbereichName }}</td>
+                <td>{{ p.normKapitel }}</td>
+                <td>
+                    <a href="{{ url_for('gui.governance_prozesse', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <form method="post" action="{{ url_for('gui.governance_prozesse') }}" style="display:inline">
+                        <input type="hidden" name="prozess_id" value="{{ p.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6">Keine Prozesse vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

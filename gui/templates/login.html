@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Anmeldung - {{ app_title }}{% endblock %}
+{% block content %}
+<div class="ekey-login-wrapper">
+    <div class="ekey-panel ekey-login-panel">
+        <h1 class="ekey-h1">Anmeldung</h1>
+        <form method="post" action="{{ url_for('gui.login') }}">
+            <div class="ekey-form-row">
+                <label for="username">Benutzername</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            <div class="ekey-form-row">
+                <label for="password">Passwort</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Anmelden</button>
+            </div>
+        </form>
+        <p class="ekey-muted">Standard-Zugang: admin / ekey2026</p>
+    </div>
+</div>
+{% endblock %}

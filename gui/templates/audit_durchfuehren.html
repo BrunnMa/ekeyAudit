@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Audit durchfuehren - {{ app_title }}{% endblock %}
+{% block content %}
+
+{% if proof_mode %}
+    <h1 class="ekey-h1">Proof bearbeiten</h1>
+    <p class="ekey-muted">Plan #{{ plan.id }} - {{ plan.fachbereich }}</p>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Frage</h2>
+        <p><strong>{{ proof.auditFrage }}</strong></p>
+        <p class="ekey-muted">Norm-Kapitel: {{ proof.normKapitel }}</p>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Ergebnis erfassen</h2>
+        <form method="post" action="{{ url_for('gui.audit_proof_detail', proof_id=proof.id) }}">
+            <input type="hidden" name="form_type" value="result">
+            <div class="ekey-form-grid">
+                <div class="ekey-form-row">
+                    <label for="nameAuditor">Name Auditor</label>
+                    <input type="text" id="nameAuditor" name="nameAuditor" required>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="datumerfasst">Datum</label>
+                    <input type="date" id="datumerfasst" name="datumerfasst">
+                </div>
+                <div class="ekey-form-row">
+                    <label for="auditBewertungID">Bewertung</label>
+                    <select id="auditBewertungID" name="auditBewertungID" required>
+                        {% for b in bewertungen %}
+                        <option value="{{ b.id }}">{{ b.auditResult }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="antwort">Antwort</label>
+                    <textarea id="antwort" name="antwort" rows="2"></textarea>
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="auditResultInfo">Info</label>
+                    <textarea id="auditResultInfo" name="auditResultInfo" rows="1"></textarea>
+                </div>
+            </div>
+            <p class="ekey-hint">Bei Bewertung "Empfehlung" oder "Abweichung" bitte zusaetzlich Abweichung, Eigner
+                und eine erste Massnahme direkt erfassen:</p>
+            <div class="ekey-form-grid">
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="abweichung">Abweichungstext</label>
+                    <textarea id="abweichung" name="abweichung" rows="2"></textarea>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="nameEigner">Eigner der Abweichung</label>
+                    <input type="text" id="nameEigner" name="nameEigner">
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="massnahme">Massnahme (optional, kann spaeter unter Massnahmen ergaenzt werden)</label>
+                    <textarea id="massnahme" name="massnahme" rows="2"></textarea>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="datumMassnahme">Termin Massnahme</label>
+                    <input type="date" id="datumMassnahme" name="datumMassnahme">
+                </div>
+                <div class="ekey-form-row">
+                    <label for="massnahmeEigner">Eigner Massnahme</label>
+                    <input type="text" id="massnahmeEigner" name="massnahmeEigner">
+                </div>
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Ergebnis speichern</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Bisherige Ergebnisse</h2>
+        <table class="ekey-table">
+            <thead><tr><th>Datum</th><th>Auditor</th><th>Bewertung</th><th>Antwort</th></tr></thead>
+            <tbody>
+            {% for r in results %}
+                <tr><td>{{ r.datumerfasst }}</td><td>{{ r.nameAuditor }}</td><td>{{ r.bewertungName }}</td><td>{{ r.antwort }}</td></tr>
+            {% else %}
+                <tr><td colspan="4">Noch kein Ergebnis erfasst.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Abweichungen zu diesem Proof</h2>
+        <table class="ekey-table">
+            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Erfasst am</th></tr></thead>
+            <tbody>
+            {% for a in abweichungen %}
+                <tr><td>{{ a.abweichung }}</td><td>{{ a.nameEigner }}</td><td>{{ a.datumErfasst }}</td></tr>
+            {% else %}
+                <tr><td colspan="3">Keine Abweichungen.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="ekey-grid-2">
+        <div class="ekey-panel">
+            <h2 class="ekey-h2">Links</h2>
+            <table class="ekey-table">
+                <thead><tr><th>Link</th></tr></thead>
+                <tbody>
+                {% for l in links %}<tr><td><a href="{{ l.link }}" target="_blank">{{ l.link }}</a></td></tr>
+                {% else %}<tr><td>Keine Links.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+            <form method="post" action="{{ url_for('gui.audit_proof_detail', proof_id=proof.id) }}" class="ekey-inline-form">
+                <input type="hidden" name="form_type" value="link">
+                <input type="text" name="link" placeholder="https://...">
+                <button type="submit" class="ekey-btn">Link hinzufuegen</button>
+            </form>
+        </div>
+        <div class="ekey-panel">
+            <h2 class="ekey-h2">Anhaenge</h2>
+            <table class="ekey-table">
+                <thead><tr><th>Anhang (Pfad/Referenz)</th></tr></thead>
+                <tbody>
+                {% for a in anhaenge %}<tr><td>{{ a.anhang }}</td></tr>
+                {% else %}<tr><td>Keine Anhaenge.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+            <form method="post" action="{{ url_for('gui.audit_proof_detail', proof_id=proof.id) }}" class="ekey-inline-form">
+                <input type="hidden" name="form_type" value="anhang">
+                <input type="text" name="anhang" placeholder="Pfad oder Referenz">
+                <button type="submit" class="ekey-btn">Anhang hinzufuegen</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Interview zu diesem Proof erfassen</h2>
+        <table class="ekey-table">
+            <thead><tr><th>Auditor</th><th>Inhalt</th></tr></thead>
+            <tbody>
+            {% for iv in interviews %}
+                <tr><td>{{ iv.nameAuditor }}</td><td>{{ iv.inhalt }}</td></tr>
+            {% else %}
+                <tr><td colspan="2">Kein Interview erfasst.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <form method="post" action="{{ url_for('gui.audit_proof_detail', proof_id=proof.id) }}">
+            <input type="hidden" name="form_type" value="interview">
+            <div class="ekey-form-grid">
+                <div class="ekey-form-row">
+                    <label for="ivName">Auditor</label>
+                    <input type="text" id="ivName" name="nameAuditor">
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="inhalt">Inhalt</label>
+                    <textarea id="inhalt" name="inhalt" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Interview speichern</button>
+            </div>
+        </form>
+    </div>
+
+    <a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=plan.id) }}" class="ekey-btn">Zurueck zum Audit-Plan</a>
+
+{% elif detail_mode %}
+    <h1 class="ekey-h1">Audit durchfuehren - Plan #{{ plan.id }}</h1>
+    <p class="ekey-muted">Fachbereich: {{ plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Proofs</h2>
+        <table class="ekey-table">
+            <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Letzte Bewertung</th><th>Aktion</th></tr></thead>
+            <tbody>
+            {% for pf in proofs %}
+                <tr>
+                    <td>{{ pf.auditFrage }}</td>
+                    <td>{{ pf.normKapitel }}</td>
+                    <td>{{ pf.letzteBewertung or '-' }}</td>
+                    <td><a href="{{ url_for('gui.audit_proof_detail', proof_id=pf.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4">Keine Proofs vorhanden. Bitte zuerst eine Checkliste starten (siehe Uebersicht laufende Audits).</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <a href="{{ url_for('gui.audit_durchfuehren') }}" class="ekey-btn">Zurueck zur Uebersicht</a>
+
+{% else %}
+    <h1 class="ekey-h1">Audit durchfuehren - laufende Audits</h1>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Geplante / laufende Audit-Plaene</h2>
+        <table class="ekey-table">
+            <thead><tr><th>#</th><th>Fachbereich</th><th>Prozess</th><th>Status</th><th>Checkliste starten</th><th>Aktion</th></tr></thead>
+            <tbody>
+            {% for pl in plaene %}
+                <tr>
+                    <td>{{ pl.id }}</td>
+                    <td>{{ pl.fachbereich }}</td>
+                    <td>{{ pl.prozessName }}</td>
+                    <td>{{ pl.statusName }}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('gui.audit_durchfuehren_start', plan_id=pl.id) }}" class="ekey-inline-form">
+                            <select name="checkliste_id">
+                                {% for c in checklisten %}
+                                <option value="{{ c.id }}">{{ c.bezeichnung }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="ekey-btn ekey-btn-small">Starten / uebernehmen</button>
+                        </form>
+                    </td>
+                    <td><a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small">Oeffnen</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6">Keine geplanten/laufenden Audits. Bitte zuerst unter "Audit planen" einen Plan anlegen und Status auf "Geplant" setzen.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="ekey-panel">
+        <h2 class="ekey-h2">Alle Audit-Plaene</h2>
+        <table class="ekey-table">
+            <thead><tr><th>#</th><th>Fachbereich</th><th>Prozess</th><th>Status</th><th>Aktion</th></tr></thead>
+            <tbody>
+            {% for pl in alle_plaene %}
+                <tr>
+                    <td>{{ pl.id }}</td>
+                    <td>{{ pl.fachbereich }}</td>
+                    <td>{{ pl.prozessName }}</td>
+                    <td>{{ pl.statusName }}</td>
+                    <td><a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small">Oeffnen</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">Keine Audit-Plaene vorhanden.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}

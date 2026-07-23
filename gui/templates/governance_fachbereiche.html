@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Fachbereiche - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Audit governance - Fachbereiche erfassen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">{% if edit_fachbereich %}Fachbereich bearbeiten{% else %}Neuen Fachbereich anlegen{% endif %}</h2>
+    <form method="post" action="{{ url_for('gui.governance_fachbereiche') }}">
+        {% if edit_fachbereich %}<input type="hidden" name="fachbereich_id" value="{{ edit_fachbereich.id }}">{% endif %}
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row">
+                <label for="fachbereich">Fachbereich</label>
+                <input type="text" id="fachbereich" name="fachbereich" value="{{ edit_fachbereich.fachbereich if edit_fachbereich else '' }}" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="leitung">Leitung</label>
+                <input type="text" id="leitung" name="leitung" list="mitarbeiter_liste" autocomplete="off"
+                       placeholder="Namen eingeben zum Suchen..."
+                       value="{{ edit_fachbereich.leitung if edit_fachbereich else '' }}">
+                <datalist id="mitarbeiter_liste">
+                    {% for m in mitarbeiter %}
+                    <option value="{{ m.name }}">{% if m.abteilung %}{{ m.abteilung }}{% endif %}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="info">Info</label>
+                <textarea id="info" name="info" rows="2">{{ edit_fachbereich.info if edit_fachbereich else '' }}</textarea>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            {% if edit_fachbereich %}
+            <a href="{{ url_for('gui.governance_fachbereiche') }}" class="ekey-btn">Abbrechen</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Vorhandene Fachbereiche</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Fachbereich</th><th>Leitung</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for f in fachbereiche %}
+            <tr>
+                <td>{{ f.fachbereich }}</td>
+                <td>{{ f.leitung }}</td>
+                <td>{{ f.info }}</td>
+                <td>
+                    <a href="{{ url_for('gui.governance_fachbereiche', edit=f.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <form method="post" action="{{ url_for('gui.governance_fachbereiche') }}" style="display:inline">
+                        <input type="hidden" name="fachbereich_id" value="{{ f.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="4">Keine Fachbereiche vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

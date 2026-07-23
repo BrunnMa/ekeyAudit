@@ -1,0 +1,6 @@
+Flask>=2.3,<4.0
+Werkzeug>=2.3
+reportlab>=4.0
+Pillow>=10.0
+ldap3>=2.9
+pyodbc>=5.0

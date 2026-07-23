@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}AuditHome - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Willkommen bei ekeyAudit</h1>
+<p class="ekey-muted">
+    QM-Auditmanagement nach ISO 9001.
+    {% if user %}
+        Angemeldet als {{ user.username }} ({{ user.rolle }}).
+    {% else %}
+        Authentifizierung ist aktuell deaktiviert (siehe Einstellungen).
+    {% endif %}
+</p>
+
+<div class="ekey-index-grid">
+    <div class="ekey-index-image">
+        <img src="{{ url_for('gui.static', filename='images/ImgekeyAudit.png') }}" alt="ekeyAudit Uebersicht">
+    </div>
+    <div class="ekey-index-buttons">
+        <a href="{{ url_for('gui.konfiguration') }}" class="ekey-btn ekey-btn-primary ekey-btn-block">Zugriff verwalten</a>
+        <a href="{{ url_for('gui.audit_programm') }}" class="ekey-btn ekey-btn-primary ekey-btn-block">Anwendung erfassen</a>
+        <a href="{{ url_for('gui.audit_plan') }}" class="ekey-btn ekey-btn-block">Audit planen</a>
+        <a href="{{ url_for('gui.audit_durchfuehren') }}" class="ekey-btn ekey-btn-block">Audit durchfuehren</a>
+        <a href="{{ url_for('gui.dashboard') }}" class="ekey-btn ekey-btn-block">Dashboard / KPIs</a>
+    </div>
+</div>
+{% endblock %}

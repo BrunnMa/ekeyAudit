@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Einstellungen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Authentifizierung</h2>
+    <p class="ekey-muted">
+        Steuert, ob beim Aufruf der Anwendung ein Login (Benutzername/Passwort) erforderlich ist.
+        Standardmaessig ist die Authentifizierung deaktiviert.
+    </p>
+
+    <form method="post" action="{{ url_for('gui.einstellungen') }}">
+        <div class="ekey-form-row">
+            <label class="ekey-checkbox-label">
+                <input type="checkbox" name="auth_enabled" {% if auth_enabled %}checked{% endif %}>
+                Authentifizierung aktivieren
+            </label>
+        </div>
+        <div class="ekey-form-row">
+            <span class="ekey-muted">
+                Aktueller Status:
+                {% if auth_enabled %}
+                    <strong style="color: var(--ekey-primary);">Aktiviert</strong> - Login ist erforderlich.
+                {% else %}
+                    <strong>Deaktiviert</strong> - kein Login erforderlich, alle Seiten sind ohne Anmeldung zugaenglich.
+                {% endif %}
+            </span>
+        </div>
+        <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+    </form>
+</div>
+{% endblock %}

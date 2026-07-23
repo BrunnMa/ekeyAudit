@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ app_title }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('gui.static', filename='css/style.css') }}">
+</head>
+<body>
+<header class="ekey-header">
+    <div class="ekey-header-left">
+        <img src="{{ url_for('gui.static', filename='images/ekey_logo.jpg') }}" alt="ekey" class="ekey-logo">
+    </div>
+    <div class="ekey-header-title">{{ app_title }}</div>
+    <div class="ekey-header-right">
+        <span class="ekey-db-status {{ 'ekey-db-status-ok' if db_connected else 'ekey-db-status-error' }}"
+              title="{% if db_connected %}Verbunden mit Datenbank-Backend '{{ db_backend }}'{% else %}{{ db_error_message }}{% endif %}">
+            <span class="ekey-db-status-dot"></span>
+            {% if db_connected %}Datenbank verbunden{% else %}Keine DB-Verbindung{% endif %}
+        </span>
+        {% if session.get('user_id') %}
+        <span class="ekey-user-info">{{ session.get('username') }} ({{ session.get('rolle') }})</span>
+        <a href="{{ url_for('gui.logout') }}" class="ekey-btn">Abmelden</a>
+        {% endif %}
+        <a href="{{ url_for('gui.beenden') }}" class="ekey-btn">Software beenden</a>
+    </div>
+</header>
+
+<div class="ekey-body">
+    {% if not auth_enabled or session.get('user_id') %}
+    <nav class="ekey-sidebar" id="ekeySidebar">
+        <button id="sidebarToggle" class="ekey-sidebar-toggle" title="Sidebar ein-/ausklappen">&#9776;</button>
+        <ul class="ekey-nav">
+            <li><a href="{{ url_for('gui.index') }}">AuditHome</a></li>
+            <li><a href="{{ url_for('gui.audit_programm') }}">Auditprogramm</a></li>
+            <li><a href="{{ url_for('gui.audit_plan') }}">Audit planen</a></li>
+            <li>
+                <a href="{{ url_for('gui.audit_durchfuehren') }}">Audit durchfuehren</a>
+                <ul class="ekey-subnav">
+                    <li><a href="{{ url_for('gui.audit_durchfuehren') }}">Laufende Audits</a></li>
+                    <li><a href="{{ url_for('gui.audit_interviews') }}">Interviews</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="{{ url_for('gui.governance_prozesse') }}">Audit governance</a>
+                <ul class="ekey-subnav">
+                    <li><a href="{{ url_for('gui.governance_fachbereiche') }}">Fachbereiche erfassen</a></li>
+                    <li><a href="{{ url_for('gui.governance_prozesse') }}">Prozesse erfassen</a></li>
+                    <li><a href="{{ url_for('gui.governance_checklisten') }}">Checklisten anlegen</a></li>
+                    <li><a href="{{ url_for('gui.governance_proofs') }}">Proofs anlegen</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="{{ url_for('gui.abweichungen') }}">Auditabweichungen</a>
+                <ul class="ekey-subnav">
+                    <li><a href="{{ url_for('gui.massnahmen') }}">Massnahmen</a></li>
+                </ul>
+            </li>
+            <li><a href="{{ url_for('gui.konfiguration') }}">Konfiguration</a></li>
+            <li><a href="{{ url_for('gui.einstellungen') }}">Einstellungen</a></li>
+            <li><a href="{{ url_for('gui.berichte') }}">Berichte</a></li>
+            <li><a href="{{ url_for('gui.dashboard') }}">Dashboards/KPIs</a></li>
+        </ul>
+    </nav>
+    {% endif %}
+
+    <main class="ekey-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="ekey-flash-container">
+                {% for category, message in messages %}
+                    <div class="ekey-flash ekey-flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {% if not auth_enabled or session.get('user_id') %}
+    <aside class="ekey-rightbar">
+        <div class="ekey-rightbar-title">Schnellzugriff</div>
+        <ul>
+            <li><a href="{{ url_for('gui.dashboard') }}">Dashboard</a></li>
+            <li><a href="{{ url_for('gui.berichte') }}">Berichte</a></li>
+            <li><a href="{{ url_for('gui.abweichungen') }}">Abweichungen</a></li>
+            <li><a href="{{ url_for('gui.massnahmen') }}">Massnahmen</a></li>
+        </ul>
+    </aside>
+    {% endif %}
+</div>
+
+<footer class="ekey-footer">
+    <a href="https://www.ekey.net" target="_blank" rel="noopener">www.ekey.net</a>
+</footer>
+
+<script src="{{ url_for('gui.static', filename='js/app.js') }}"></script>
+</body>
+</html>

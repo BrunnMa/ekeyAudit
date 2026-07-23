@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Dashboard / KPIs</h1>
+
+<div class="ekey-kpi-grid">
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.anzahl_programme }}</div>
+        <div class="ekey-kpi-label">Auditprogramme gesamt</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.anzahl_plaene }}</div>
+        <div class="ekey-kpi-label">Audit-Plaene gesamt</div>
+    </div>
+    <div class="ekey-kpi-tile ekey-kpi-tile-warn">
+        <div class="ekey-kpi-value">{{ kpis.offene_abweichungen }}</div>
+        <div class="ekey-kpi-label">Offene Abweichungen gesamt</div>
+    </div>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Audits je Status</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Status</th><th>Anzahl</th><th>Balken</th></tr></thead>
+        <tbody>
+        {% for row in kpis.audits_je_status %}
+            <tr>
+                <td>{{ row.statusName }}</td>
+                <td>{{ row.anzahl }}</td>
+                <td><div class="ekey-bar" style="width: {{ (row.anzahl * 20) if row.anzahl < 5 else 100 }}px;"></div></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Offene Massnahmen nach Status</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Status</th><th>Anzahl</th></tr></thead>
+        <tbody>
+        {% for name, anzahl in kpis.offene_massnahmen_je_status.items() %}
+            <tr><td>{{ name }}</td><td>{{ anzahl }}</td></tr>
+        {% else %}
+            <tr><td colspan="2">Keine offenen Massnahmen.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Abweichungsquote je Prozess</h2>
+    <table class="ekey-table">
+        <thead><tr><th>Prozess</th><th>Abweichungen</th><th>Bewertet</th><th>Quote</th></tr></thead>
+        <tbody>
+        {% for row in kpis.abweichungsquote_je_prozess %}
+            <tr>
+                <td>{{ row.prozess }}</td>
+                <td>{{ row.abweichungen }}</td>
+                <td>{{ row.bewertet }}</td>
+                <td>{{ row.quote }} %</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="4">Noch keine bewerteten Proofs vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

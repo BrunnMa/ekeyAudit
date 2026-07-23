@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Audit planen - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Audit planen</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Neuen Audit-Plan-Eintrag anlegen</h2>
+    <p class="ekey-muted">Hinweis: Liegt das Interview- oder Auditende-Datum ausserhalb des Start-/End-Datums
+        des gewaehlten Auditprogramms, wird nach dem Speichern eine Warnung angezeigt. Das Speichern ist dennoch moeglich.</p>
+    <form method="post" action="{{ url_for('gui.audit_plan') }}">
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row">
+                <label for="auditProgrammId">Auditprogramm</label>
+                <select id="auditProgrammId" name="auditProgrammId" required>
+                    <option value="">-- auswaehlen --</option>
+                    {% for p in programme %}
+                    <option value="{{ p.id }}">{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="fachbereich">Fachbereich</label>
+                <select id="fachbereich" name="fachbereich" onchange="ekeyFachbereichChange(this)">
+                    <option value="">-- auswaehlen --</option>
+                    {% for fb in fachbereiche %}
+                    <option value="{{ fb.id }}" data-leitung="{{ fb.leitung or '' }}">{{ fb.fachbereich }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="auditProzess">Prozess</label>
+                <select id="auditProzess" name="auditProzess">
+                    <option value="">-- auswaehlen --</option>
+                    {% for pr in prozesse %}
+                    <option value="{{ pr.id }}">{{ pr.processName }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="verantwortlich">Verantwortlich</label>
+                <input type="text" id="verantwortlich" name="verantwortlich">
+                <span class="ekey-hint">Wird bei Auswahl des Fachbereichs automatisch aus der Leitung uebernommen (kann angepasst werden).</span>
+            </div>
+            <div class="ekey-form-row">
+                <label for="datumAuditEnde">Datum Audit-Ende</label>
+                <input type="date" id="datumAuditEnde" name="datumAuditEnde">
+            </div>
+            <div class="ekey-form-row">
+                <label for="datumInterview">Datum Interview</label>
+                <input type="date" id="datumInterview" name="datumInterview">
+            </div>
+            <div class="ekey-form-row">
+                <label for="auditStatus">Status</label>
+                <select id="auditStatus" name="auditStatus">
+                    {% for s in audit_status %}
+                    <option value="{{ s.id }}">{{ s.auditStatus }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="info">Info</label>
+                <textarea id="info" name="info" rows="2"></textarea>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+        </div>
+    </form>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Vorhandene Audit-Plaene</h2>
+    <table class="ekey-table">
+        <thead>
+        <tr>
+            <th>#</th><th>Programm-Jahr</th><th>Fachbereich</th><th>Prozess</th>
+            <th>Verantwortlich</th><th>Audit-Ende</th><th>Interview</th><th>Status</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for pl in plaene %}
+            <tr>
+                <td>{{ pl.id }}</td>
+                <td>{{ pl.auditJahr }}</td>
+                <td>{{ pl.fachbereichName }}</td>
+                <td>{{ pl.prozessName }}</td>
+                <td>{{ pl.verantwortlich }}</td>
+                <td>{{ pl.datumAuditEnde }}</td>
+                <td>{{ pl.datumInterview }}</td>
+                <td>{{ pl.statusName }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="8">Keine Audit-Plaene vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function ekeyFachbereichChange(select) {
+    var option = select.options[select.selectedIndex];
+    var leitung = option ? option.getAttribute('data-leitung') : '';
+    var verantwortlichField = document.getElementById('verantwortlich');
+    if (leitung) {
+        verantwortlichField.value = leitung;
+    }
+}
+</script>
+{% endblock %}

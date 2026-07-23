@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Konfiguration - {{ app_title }}{% endblock %}
+{% block content %}
+<h1 class="ekey-h1">Konfiguration</h1>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Bereich waehlen</h2>
+    <div class="ekey-tabs">
+        <a href="{{ url_for('gui.konfiguration', tab='audittyp') }}" class="ekey-btn {% if active_tab=='audittyp' %}ekey-btn-active{% endif %}">Audit-Typ</a>
+        <a href="{{ url_for('gui.konfiguration', tab='auditstatus') }}" class="ekey-btn {% if active_tab=='auditstatus' %}ekey-btn-active{% endif %}">Audit-Status</a>
+        <a href="{{ url_for('gui.konfiguration', tab='auditbewertung') }}" class="ekey-btn {% if active_tab=='auditbewertung' %}ekey-btn-active{% endif %}">Audit-Bewertung</a>
+        <a href="{{ url_for('gui.konfiguration', tab='mitarbeiter') }}" class="ekey-btn {% if active_tab=='mitarbeiter' %}ekey-btn-active{% endif %}">Mitarbeiter</a>
+        <a href="{{ url_for('gui.konfiguration', tab='users') }}" class="ekey-btn {% if active_tab=='users' %}ekey-btn-active{% endif %}">Zugriff / Benutzer</a>
+    </div>
+</div>
+
+{% if active_tab == 'audittyp' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Audit-Typ anlegen</h2>
+    <form method="post" action="{{ url_for('gui.konfiguration') }}" class="ekey-inline-form">
+        <input type="hidden" name="table_key" value="audittyp">
+        <input type="text" name="auditTyp" placeholder="Audit-Typ" required>
+        <input type="text" name="info" placeholder="Info">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Audit-Typ</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for row in data.audittyp %}
+            <tr>
+                <td>{{ row.auditTyp }}</td>
+                <td>{{ row.info }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
+                        <input type="hidden" name="table_key" value="audittyp">
+                        <input type="hidden" name="row_id" value="{{ row.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if active_tab == 'auditstatus' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Audit-Status anlegen</h2>
+    <form method="post" action="{{ url_for('gui.konfiguration') }}" class="ekey-inline-form">
+        <input type="hidden" name="table_key" value="auditstatus">
+        <input type="text" name="auditStatus" placeholder="Status" required>
+        <input type="text" name="info" placeholder="Info">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Status</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for row in data.auditstatus %}
+            <tr>
+                <td>{{ row.auditStatus }}</td>
+                <td>{{ row.info }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
+                        <input type="hidden" name="table_key" value="auditstatus">
+                        <input type="hidden" name="row_id" value="{{ row.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if active_tab == 'auditbewertung' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Audit-Bewertung anlegen</h2>
+    <form method="post" action="{{ url_for('gui.konfiguration') }}" class="ekey-inline-form">
+        <input type="hidden" name="table_key" value="auditbewertung">
+        <input type="text" name="auditResult" placeholder="Bewertung" required>
+        <input type="text" name="info" placeholder="Info">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Bewertung</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for row in data.auditbewertung %}
+            <tr>
+                <td>{{ row.auditResult }}</td>
+                <td>{{ row.info }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
+                        <input type="hidden" name="table_key" value="auditbewertung">
+                        <input type="hidden" name="row_id" value="{{ row.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if active_tab == 'mitarbeiter' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Active Directory / LDAP-Abgleich</h2>
+    {% if ad_configured %}
+    <p class="ekey-muted">Active Directory ist konfiguriert. Ein Sync gleicht Mitarbeiter per sAMAccountName ab (Update oder Neuanlage), manuelle Eintraege bleiben unberuehrt.</p>
+    <form method="post" action="{{ url_for('gui.konfiguration_mitarbeiter_ad_sync') }}">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Jetzt von AD synchronisieren</button>
+    </form>
+    {% else %}
+    <p class="ekey-hint">
+        Kein Active Directory konfiguriert (EKEY_AD_SERVER / EKEY_AD_BASE_DN fehlen in config.py bzw. den
+        Umgebungsvariablen). Die Mitarbeiterliste ist bis dahin rein manuell zu pflegen.
+    </p>
+    <form method="post" action="{{ url_for('gui.konfiguration_mitarbeiter_ad_sync') }}">
+        <button type="submit" class="ekey-btn">Sync trotzdem versuchen</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Mitarbeiter manuell anlegen</h2>
+    <form method="post" action="{{ url_for('gui.konfiguration') }}" class="ekey-inline-form">
+        <input type="hidden" name="table_key" value="mitarbeiter">
+        <input type="text" name="name" placeholder="Name" required>
+        <input type="text" name="username" placeholder="Benutzername (AD)">
+        <input type="text" name="email" placeholder="E-Mail">
+        <input type="text" name="abteilung" placeholder="Abteilung">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Abteilung</th><th>Quelle</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for row in data.mitarbeiter %}
+            <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.username }}</td>
+                <td>{{ row.email }}</td>
+                <td>{{ row.abteilung }}</td>
+                <td>{{ row.quelle }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
+                        <input type="hidden" name="table_key" value="mitarbeiter">
+                        <input type="hidden" name="row_id" value="{{ row.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6">Keine Mitarbeiter erfasst.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if active_tab == 'users' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Neuen Benutzer anlegen</h2>
+    <form method="post" action="{{ url_for('gui.konfiguration_user_add') }}" class="ekey-inline-form">
+        <input type="text" name="username" placeholder="Benutzername" required>
+        <input type="password" name="password" placeholder="Passwort" required>
+        <select name="rolle">
+            {% for r in rollen %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Benutzername</th><th>Rolle</th><th>Aktiv</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+            <tr>
+                <td>{{ u.username }}</td>
+                <td>{{ u.rolle }}</td>
+                <td>{{ 'Ja' if u.aktiv else 'Nein' }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration_user_edit', user_id=u.id) }}" class="ekey-inline-form">
+                        <select name="rolle">
+                            {% for r in rollen %}
+                            <option value="{{ r }}" {% if r == u.rolle %}selected{% endif %}>{{ r }}</option>
+                            {% endfor %}
+                        </select>
+                        <label><input type="checkbox" name="aktiv" {% if u.aktiv %}checked{% endif %}> aktiv</label>
+                        <input type="password" name="password" placeholder="Neues Passwort (optional)">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Speichern</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="ekey-panel">
+    <p class="ekey-hint">Hinweis: "AuditCheck" (automatisierte Pruefungen) und der teilautomatisierte AuditInfo-Abschnitt
+    sind laut Spezifikation noch offen (TBD) und werden hier nicht konfiguriert - Status: in Entwicklung.</p>
+</div>
+{% endblock %}
