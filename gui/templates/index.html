@@ -14,13 +14,33 @@
 <div class="ekey-index-grid">
     <div class="ekey-index-image">
         <img src="{{ url_for('gui.static', filename='images/ImgekeyAudit.png') }}" alt="ekeyAudit Uebersicht">
+
+        <form id="homeAuditprogrammForm" class="ekey-inline-form" style="margin-top: 10px;"
+              onsubmit="return false;" data-base-url="{{ url_for('gui.audit_programm') }}">
+            <select id="homeAuditprogrammSelect" name="programmId">
+                <option value="">-- Auditprogramm waehlen --</option>
+                {% for p in programme %}
+                <option value="{{ p.id }}">{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenAuditprogramm()">Programm oeffnen</button>
+        </form>
     </div>
     <div class="ekey-index-buttons">
-        <a href="{{ url_for('gui.konfiguration') }}" class="ekey-btn ekey-btn-primary ekey-btn-block">Zugriff verwalten</a>
-        <a href="{{ url_for('gui.audit_programm') }}" class="ekey-btn ekey-btn-primary ekey-btn-block">Anwendung erfassen</a>
-        <a href="{{ url_for('gui.audit_plan') }}" class="ekey-btn ekey-btn-block">Audit planen</a>
-        <a href="{{ url_for('gui.audit_durchfuehren') }}" class="ekey-btn ekey-btn-block">Audit durchfuehren</a>
-        <a href="{{ url_for('gui.dashboard') }}" class="ekey-btn ekey-btn-block">Dashboard / KPIs</a>
+        <div class="ekey-index-info-panel">
+            <h2 class="ekey-h2">AuditProgramme</h2>
+            <p>Anzahl Programme gesamt: <strong>{{ kpis.programme_gesamt }}</strong></p>
+            <p>Davon offen: <strong>{{ kpis.programme_offen }}</strong></p>
+        </div>
+        <div class="ekey-index-info-panel">
+            <h2 class="ekey-h2">AuditProofs</h2>
+            <p>Anzahl AuditProofs gesamt: <strong>{{ kpis.proofs_gesamt }}</strong></p>
+        </div>
+        <div class="ekey-index-info-panel">
+            <h2 class="ekey-h2">Auditabweichungen</h2>
+            <p>Anzahl Auditabweichungen gesamt: <strong>{{ kpis.abweichungen_gesamt }}</strong></p>
+            <p>Davon offen: <strong>{{ kpis.abweichungen_offen }}</strong></p>
+        </div>
     </div>
 </div>
 {% endblock %}

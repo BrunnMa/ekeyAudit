@@ -101,7 +101,7 @@
         <thead>
         <tr>
             <th>#</th><th>Programm-Jahr</th><th>Fachbereich</th><th>Prozess</th>
-            <th>Verantwortlich</th><th>Audit-Ende</th><th>Interview</th><th>Status</th>
+            <th>Verantwortlich</th><th>Audit-Ende</th><th>Interview</th><th>Status</th><th>Aktionen</th>
         </tr>
         </thead>
         <tbody>
@@ -115,13 +115,38 @@
                 <td>{{ pl.datumAuditEnde }}</td>
                 <td>{{ pl.datumInterview }}</td>
                 <td>{{ pl.statusName }}</td>
+                <td>
+                    <a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small">Zur Checkliste</a>
+                    <button type="button" class="ekey-btn ekey-btn-small"
+                            onclick="ekeyConfirmDeletePlan('{{ url_for('gui.audit_plan_delete', plan_id=pl.id) }}')">Loeschen</button>
+                </td>
             </tr>
         {% else %}
-            <tr><td colspan="8">Keine Audit-Plaene fuer dieses Auditprogramm vorhanden.</td></tr>
+            <tr><td colspan="9">Keine Audit-Plaene fuer dieses Auditprogramm vorhanden.</td></tr>
         {% endfor %}
         </tbody>
     </table>
     {% endif %}
+</div>
+
+<div id="modalConfirmDeletePlan" class="ekey-modal-overlay">
+<div class="ekey-modal" style="max-width: 420px;">
+<div class="ekey-modal-header">
+    <h2>Wirklich loeschen?</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalConfirmDeletePlan')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <p class="ekey-muted">Der Auditplan-Eintrag sowie alle zugehoerigen Proofs, Ergebnisse, Abweichungen und
+        Massnahmen werden unwiderruflich geloescht.</p>
+    <form method="post" id="formDeletePlan" action="">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Ja, loeschen</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalConfirmDeletePlan')">Abbrechen</button>
+        </div>
+    </form>
+</div>
+</div>
 </div>
 
 <script>
@@ -132,6 +157,12 @@ function ekeyFachbereichChange(select) {
     if (leitung) {
         verantwortlichField.value = leitung;
     }
+}
+
+function ekeyConfirmDeletePlan(deleteUrl) {
+    var form = document.getElementById('formDeletePlan');
+    if (form) form.setAttribute('action', deleteUrl);
+    ekeyOpenModal('modalConfirmDeletePlan');
 }
 </script>
 {% endblock %}

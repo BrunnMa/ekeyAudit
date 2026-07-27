@@ -940,6 +940,59 @@ def get_audit_plan(plan_id):
     return query("SELECT * FROM STG_QM_AuditPlan WHERE id = ?", (plan_id,), fetchone=True)
 
 
+def delete_audit_plan(plan_id):
+    """Loescht einen Audit-Plan-Eintrag vollstaendig - inkl. aller abhaengigen
+    Datenbereiche (Proofs, Ergebnisse, Abweichungen, Massnahmen, Status-Historie
+    der Massnahmen, Interviews, Links, Anhaenge). Reihenfolge: von den Blaettern
+    der Abhaengigkeitskette nach oben, damit keine Fremdschluessel verwaisen."""
+    execute("""
+        DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID IN (
+            SELECT m.id FROM STG_QM_AuditMassnahme m
+            JOIN STG_QM_AuditAbweichung a ON a.id = m.auditAbweichungID
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            JOIN STG_QM_AuditProofs pf ON pf.id = r.auditProofsId
+            WHERE pf.auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditMassnahme WHERE auditAbweichungID IN (
+            SELECT a.id FROM STG_QM_AuditAbweichung a
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            JOIN STG_QM_AuditProofs pf ON pf.id = r.auditProofsId
+            WHERE pf.auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditAbweichung WHERE auditResultID IN (
+            SELECT r.id FROM STG_QM_AuditResult r
+            JOIN STG_QM_AuditProofs pf ON pf.id = r.auditProofsId
+            WHERE pf.auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditResult WHERE auditProofsId IN (
+            SELECT id FROM STG_QM_AuditProofs WHERE auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditInterview WHERE auditProofsId IN (
+            SELECT id FROM STG_QM_AuditProofs WHERE auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditAnhang WHERE auditProofsId IN (
+            SELECT id FROM STG_QM_AuditProofs WHERE auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditLink WHERE auditProofsId IN (
+            SELECT id FROM STG_QM_AuditProofs WHERE auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("DELETE FROM STG_QM_AuditProofs WHERE auditPlanId = ?", (plan_id,))
+    execute("DELETE FROM STG_QM_AuditPlan WHERE id = ?", (plan_id,))
+
+
 def create_audit_plan(data):
     return execute("""
         INSERT INTO STG_QM_AuditPlan

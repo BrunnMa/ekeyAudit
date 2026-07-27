@@ -67,3 +67,28 @@ document.addEventListener("click", function (e) {
         e.target.classList.remove("ekey-modal-open");
     }
 });
+
+// ---------------------------------------------------------------------
+// Startseite (AuditHome): ausgewaehltes Auditprogramm oeffnen
+// ---------------------------------------------------------------------
+
+function ekeyOpenAuditprogramm() {
+    var form = document.getElementById("homeAuditprogrammForm");
+    var select = document.getElementById("homeAuditprogrammSelect");
+    if (!form || !select || !select.value) return;
+    window.location.href = form.getAttribute("data-base-url") + "?edit=" + encodeURIComponent(select.value);
+}
+
+// ---------------------------------------------------------------------
+// Generisches Ein-/Ausblenden (z.B. "+ Neues Ziel"-Formular in einem Pop-up)
+// ---------------------------------------------------------------------
+
+function ekeyToggle(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (el.style.display === "none") {
+        el.style.display = "";
+    } else {
+        el.style.display = "none";
+    }
+}

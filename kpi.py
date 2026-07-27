@@ -76,6 +76,36 @@ def anzahl_audit_programme():
     return row["c"] if row else 0
 
 
+def offene_audit_programme_gesamt():
+    """Anzahl AuditProgramme, deren Status nicht 'Fertig' (4) oder 'Wirksam' (5) ist."""
+    row = db.query("""
+        SELECT COUNT(*) AS c FROM STG_QM_AuditProgramm
+        WHERE auditStatus IS NULL OR auditStatus NOT IN (4, 5)
+    """, fetchone=True)
+    return row["c"] if row else 0
+
+
+def anzahl_abweichungen_gesamt():
+    row = db.query("SELECT COUNT(*) AS c FROM STG_QM_AuditAbweichung", fetchone=True)
+    return row["c"] if row else 0
+
+
+def anzahl_auditproofs_gesamt():
+    row = db.query("SELECT COUNT(*) AS c FROM STG_QM_AuditProofs", fetchone=True)
+    return row["c"] if row else 0
+
+
+def audithome_kpis():
+    """Kennzahlen fuer die Startseite AuditHome (Auditprogramme / AuditProofs / Auditabweichungen)."""
+    return {
+        "programme_gesamt": anzahl_audit_programme(),
+        "programme_offen": offene_audit_programme_gesamt(),
+        "proofs_gesamt": anzahl_auditproofs_gesamt(),
+        "abweichungen_gesamt": anzahl_abweichungen_gesamt(),
+        "abweichungen_offen": offene_abweichungen_gesamt(),
+    }
+
+
 def get_dashboard_kpis():
     return {
         "audits_je_status": audits_je_status(),

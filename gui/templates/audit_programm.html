@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Auditplan anlegen - {{ app_title }}{% endblock %}
+{% block title %}Auditprogramm erstellen - {{ app_title }}{% endblock %}
 {% block content %}
-<h1 class="ekey-h1">Auditplan anlegen</h1>
+<h1 class="ekey-h1">Auditprogramm erstellen</h1>
 
 <div class="ekey-form-actions" style="margin-bottom: 16px;">
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuesAuditprogramm')">+ Neues Auditprogramm anlegen</button>
@@ -145,34 +145,6 @@
 </div>
 </div>
 
-{% if edit_programm %}
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Auditziele zu Programm #{{ edit_programm.id }}</h2>
-    <table class="ekey-table">
-        <thead><tr><th>Ziel</th><th>Aktion</th></tr></thead>
-        <tbody>
-        {% for z in ziele %}
-            <tr>
-                <td>{{ z.auditZiel }}</td>
-                <td>
-                    <form method="post" action="{{ url_for('gui.audit_programm_ziel_delete', ziel_id=z.id) }}" style="display:inline">
-                        <input type="hidden" name="programm_id" value="{{ edit_programm.id }}">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
-                    </form>
-                </td>
-            </tr>
-        {% else %}
-            <tr><td colspan="2">Keine Auditziele erfasst.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    <form method="post" action="{{ url_for('gui.audit_programm_ziel_add', programm_id=edit_programm.id) }}" class="ekey-inline-form">
-        <input type="text" name="auditZiel" placeholder="Neues Auditziel" required>
-        <button type="submit" class="ekey-btn">Ziel hinzufuegen</button>
-    </form>
-</div>
-{% endif %}
-
 <div class="ekey-panel">
     <h2 class="ekey-h2">Vorhandene Auditprogramme</h2>
     <table class="ekey-table">
@@ -193,7 +165,11 @@
                 <td>{{ p.statusName }}</td>
                 <td>{{ p.startDatum }}</td>
                 <td>{{ p.endDatum }}</td>
-                <td><a href="{{ url_for('gui.audit_programm', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a></td>
+                <td>
+                    <a href="{{ url_for('gui.audit_programm', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.audit_plan', programmFilter=p.id) }}" class="ekey-btn ekey-btn-small">zum AuditPlan</a>
+                    <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalZiele{{ p.id }}')">Auditziele</button>
+                </td>
             </tr>
         {% else %}
             <tr><td colspan="9">Keine Auditprogramme vorhanden.</td></tr>
@@ -201,4 +177,48 @@
         </tbody>
     </table>
 </div>
+
+{% for p in programme %}
+<div id="modalZiele{{ p.id }}" class="ekey-modal-overlay{% if ziele_open_id and ziele_open_id|string == p.id|string %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Auditziele zu Programm #{{ p.id }} ({{ p.auditJahr }} - {{ p.auditTyp }})</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalZiele{{ p.id }}')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <table class="ekey-table">
+        <thead><tr><th>Ziel</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for z in ziele_by_programm.get(p.id, []) %}
+            <tr>
+                <td>{{ z.auditZiel }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.audit_programm_ziel_delete', ziel_id=z.id) }}" style="display:inline">
+                        <input type="hidden" name="programm_id" value="{{ p.id }}">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="2">Keine Auditziele erfasst.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="ekey-form-actions" style="margin-top: 10px;">
+        <button type="button" class="ekey-btn" onclick="ekeyToggle('zieleForm{{ p.id }}')">+ Neues Ziel</button>
+    </div>
+    <form id="zieleForm{{ p.id }}" method="post" action="{{ url_for('gui.audit_programm_ziel_add', programm_id=p.id) }}"
+          class="ekey-inline-form" style="display:none; margin-top: 8px;">
+        <input type="text" name="auditZiel" placeholder="Neues Auditziel" required>
+        <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+    </form>
+
+    <div class="ekey-form-actions" style="margin-top: 12px;">
+        <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalZiele{{ p.id }}')">Schliessen</button>
+    </div>
+</div>
+</div>
+</div>
+{% endfor %}
 {% endblock %}

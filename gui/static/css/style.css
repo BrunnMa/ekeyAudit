@@ -322,6 +322,8 @@ input:focus, select:focus, textarea:focus {
   gap: 8px;
   min-width: 160px;
 }
+.ekey-index-info-panel { margin-bottom: 0; padding: 4px 0; border: none; background: none; }
+.ekey-index-info-panel p { margin: 4px 0; font-size: 11px; }
 
 /* ---------------- Dashboard / KPI ---------------- */
 .ekey-kpi-grid {

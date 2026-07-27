@@ -78,7 +78,13 @@
         <tbody>
         {% for p in prozesse %}
             <tr>
-                <td>{{ p.processName }}</td>
+                <td>
+                    {% if p.link %}
+                    <a href="{{ p.link }}" target="_blank" rel="noopener">{{ p.processName }}</a>
+                    {% else %}
+                    {{ p.processName }}
+                    {% endif %}
+                </td>
                 <td>{{ p.processNumber }}</td>
                 <td>{{ p.processOwner }}</td>
                 <td>{{ p.fachbereichName }}</td>

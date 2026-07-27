@@ -52,7 +52,12 @@ def logout():
 @gui.route("/")
 @security.login_required
 def index():
-    return render_template("index.html", user=security.current_user())
+    return render_template(
+        "index.html",
+        user=security.current_user(),
+        kpis=kpi.audithome_kpis(),
+        programme=db.list_audit_programme(),
+    )
 
 
 @gui.route("/dashboard")
@@ -98,7 +103,8 @@ def audit_programm():
     programme = db.list_audit_programme()
     edit_id = request.args.get("edit")
     edit_programm = db.get_audit_programm(edit_id) if edit_id else None
-    ziele = db.list_audit_ziele(edit_id) if edit_id else []
+    ziele_open_id = request.args.get("ziele")
+    ziele_by_programm = {p["id"]: db.list_audit_ziele(p["id"]) for p in programme}
 
     return render_template(
         "audit_programm.html",
@@ -107,7 +113,8 @@ def audit_programm():
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
         mitarbeiter=db.list_mitarbeiter(),
         edit_programm=edit_programm,
-        ziele=ziele,
+        ziele_by_programm=ziele_by_programm,
+        ziele_open_id=ziele_open_id,
     )
 
 
@@ -118,7 +125,7 @@ def audit_programm_ziel_add(programm_id):
     if ziel_text:
         db.add_audit_ziel(programm_id, ziel_text)
         flash("Auditziel hinzugefuegt.", "success")
-    return redirect(url_for("gui.audit_programm", edit=programm_id))
+    return redirect(url_for("gui.audit_programm", ziele=programm_id))
 
 
 @gui.route("/audit-programm/ziel/<int:ziel_id>/delete", methods=["POST"])
@@ -127,7 +134,7 @@ def audit_programm_ziel_delete(ziel_id):
     programm_id = request.form.get("programm_id")
     db.delete_audit_ziel(ziel_id)
     flash("Auditziel geloescht.", "success")
-    return redirect(url_for("gui.audit_programm", edit=programm_id))
+    return redirect(url_for("gui.audit_programm", ziele=programm_id))
 
 
 # --------------------------------------------------------------------------
@@ -178,6 +185,17 @@ def audit_plan():
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
     )
+
+
+@gui.route("/audit-plan/<int:plan_id>/delete", methods=["POST"])
+@security.login_required
+def audit_plan_delete(plan_id):
+    db.delete_audit_plan(plan_id)
+    flash("Audit-Plan-Eintrag vollstaendig geloescht.", "success")
+    programm_filter = request.form.get("programmFilter") or None
+    if programm_filter:
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+    return redirect(url_for("gui.audit_plan"))
 
 
 # --------------------------------------------------------------------------
