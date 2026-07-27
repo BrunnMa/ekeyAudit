@@ -359,3 +359,47 @@ input:focus, select:focus, textarea:focus {
   .ekey-form-row-wide { grid-column: span 1; }
   .ekey-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* ---------------- Modal / Pop-up ---------------- */
+.ekey-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+}
+.ekey-modal-overlay.ekey-modal-open { display: flex; }
+.ekey-modal {
+  background: #FFFFFF;
+  border: 1px solid var(--ekey-border);
+  width: 100%;
+  max-width: 760px;
+}
+.ekey-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ekey-border);
+  background: var(--ekey-table-header);
+}
+.ekey-modal-header h2 { margin: 0; border: none; padding: 0; }
+.ekey-modal-close {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--ekey-primary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.ekey-modal-close:hover { background: var(--ekey-primary); color: #FFFFFF; }
+.ekey-modal-body { padding: 14px; }
+
+/* ---------------- Filterzeile (z.B. Auditprogramm-Auswahl vor Listenanzeige) ---------------- */
+.ekey-filter-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.ekey-filter-row .ekey-form-row { min-width: 280px; }

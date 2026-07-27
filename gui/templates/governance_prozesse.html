@@ -3,8 +3,17 @@
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Prozesse erfassen</h1>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">{% if edit_prozess %}Prozess bearbeiten{% else %}Neuen Prozess anlegen{% endif %}</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProzess')">+ Neuen Prozess anlegen</button>
+</div>
+
+<div id="modalNeuerProzess" class="ekey-modal-overlay{% if edit_prozess %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>{% if edit_prozess %}Prozess bearbeiten{% else %}Neuen Prozess anlegen{% endif %}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerProzess')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.governance_prozesse') }}">
         {% if edit_prozess %}<input type="hidden" name="prozess_id" value="{{ edit_prozess.id }}">{% endif %}
         <div class="ekey-form-grid">
@@ -53,9 +62,13 @@
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
             {% if edit_prozess %}
             <a href="{{ url_for('gui.governance_prozesse') }}" class="ekey-btn">Abbrechen</a>
+            {% else %}
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerProzess')">Abbrechen</button>
             {% endif %}
         </div>
     </form>
+</div>
+</div>
 </div>
 
 <div class="ekey-panel">

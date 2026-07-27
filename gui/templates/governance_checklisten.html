@@ -3,8 +3,17 @@
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Checklisten anlegen</h1>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">{% if edit_checkliste %}Checkliste bearbeiten{% else %}Neue Checkliste anlegen{% endif %}</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeueCheckliste')">+ Neue Checkliste anlegen</button>
+</div>
+
+<div id="modalNeueCheckliste" class="ekey-modal-overlay{% if edit_checkliste %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>{% if edit_checkliste %}Checkliste bearbeiten{% else %}Neue Checkliste anlegen{% endif %}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeueCheckliste')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.governance_checklisten') }}">
         {% if edit_checkliste %}<input type="hidden" name="checkliste_id" value="{{ edit_checkliste.id }}">{% endif %}
         <div class="ekey-form-grid">
@@ -32,8 +41,15 @@
         </div>
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            {% if edit_checkliste %}
+            <a href="{{ url_for('gui.governance_checklisten') }}" class="ekey-btn">Abbrechen</a>
+            {% else %}
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeueCheckliste')">Abbrechen</button>
+            {% endif %}
         </div>
     </form>
+</div>
+</div>
 </div>
 
 <div class="ekey-panel">

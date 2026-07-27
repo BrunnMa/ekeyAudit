@@ -3,8 +3,17 @@
 {% block content %}
 <h1 class="ekey-h1">Audit planen</h1>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Neuen Audit-Plan-Eintrag anlegen</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerAuditplanEintrag')">+ Neuer Auditplan-Eintrag erstellen</button>
+</div>
+
+<div id="modalNeuerAuditplanEintrag" class="ekey-modal-overlay">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Neuen Auditplan-Eintrag erstellen</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerAuditplanEintrag')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <p class="ekey-muted">Hinweis: Liegt das Interview- oder Auditende-Datum ausserhalb des Start-/End-Datums
         des gewaehlten Auditprogramms, wird nach dem Speichern eine Warnung angezeigt. Das Speichern ist dennoch moeglich.</p>
     <form method="post" action="{{ url_for('gui.audit_plan') }}">
@@ -64,12 +73,30 @@
         </div>
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerAuditplanEintrag')">Abbrechen</button>
         </div>
     </form>
 </div>
+</div>
+</div>
 
 <div class="ekey-panel">
-    <h2 class="ekey-h2">Vorhandene Audit-Plaene</h2>
+    <h2 class="ekey-h2">Vorhandene Auditplaene</h2>
+    <form method="get" action="{{ url_for('gui.audit_plan') }}" class="ekey-filter-row">
+        <div class="ekey-form-row">
+            <label for="programmFilter">Auditprogramm</label>
+            <select id="programmFilter" name="programmFilter" onchange="this.form.submit()">
+                <option value="">-- Auditprogramm waehlen --</option>
+                {% for p in programme %}
+                <option value="{{ p.id }}" {% if programm_filter and programm_filter|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if not programm_filter %}
+    <p class="ekey-hint">Bitte zuerst ein Auditprogramm auswaehlen, um die vorhandenen Auditplaene anzuzeigen.</p>
+    {% else %}
     <table class="ekey-table">
         <thead>
         <tr>
@@ -90,10 +117,11 @@
                 <td>{{ pl.statusName }}</td>
             </tr>
         {% else %}
-            <tr><td colspan="8">Keine Audit-Plaene vorhanden.</td></tr>
+            <tr><td colspan="8">Keine Audit-Plaene fuer dieses Auditprogramm vorhanden.</td></tr>
         {% endfor %}
         </tbody>
     </table>
+    {% endif %}
 </div>
 
 <script>

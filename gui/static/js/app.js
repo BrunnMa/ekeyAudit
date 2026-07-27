@@ -38,3 +38,32 @@ function ekeyRemoveAuditorRow(btn) {
         if (input) input.value = "";
     }
 }
+
+// ---------------------------------------------------------------------
+// Generische Pop-up/Modal-Steuerung (z.B. "Neues Auditprogramm anlegen",
+// "Neuer Auditplan-Eintrag erstellen")
+// ---------------------------------------------------------------------
+
+function ekeyOpenModal(id) {
+    var overlay = document.getElementById(id);
+    if (overlay) overlay.classList.add("ekey-modal-open");
+}
+
+function ekeyCloseModal(id) {
+    var overlay = document.getElementById(id);
+    if (overlay) overlay.classList.remove("ekey-modal-open");
+}
+
+document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+        document.querySelectorAll(".ekey-modal-overlay.ekey-modal-open").forEach(function (o) {
+            o.classList.remove("ekey-modal-open");
+        });
+    }
+});
+
+document.addEventListener("click", function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains("ekey-modal-overlay")) {
+        e.target.classList.remove("ekey-modal-open");
+    }
+});

@@ -17,8 +17,17 @@
 </div>
 
 {% if checkliste_id %}
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Neuen Proof (Pruepunkt) hinzufuegen</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProof')">+ Neuen Proof anlegen</button>
+</div>
+
+<div id="modalNeuerProof" class="ekey-modal-overlay">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Neuen Proof (Pruefpunkt) hinzufuegen</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerProof')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.governance_proofs') }}">
         <input type="hidden" name="checkliste_id" value="{{ checkliste_id }}">
         <input type="hidden" name="action" value="add">
@@ -38,8 +47,11 @@
         </div>
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Hinzufuegen</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerProof')">Abbrechen</button>
         </div>
     </form>
+</div>
+</div>
 </div>
 
 <div class="ekey-panel">

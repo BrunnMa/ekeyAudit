@@ -3,8 +3,17 @@
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Fachbereiche erfassen</h1>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">{% if edit_fachbereich %}Fachbereich bearbeiten{% else %}Neuen Fachbereich anlegen{% endif %}</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerFachbereich')">+ Neuen Fachbereich anlegen</button>
+</div>
+
+<div id="modalNeuerFachbereich" class="ekey-modal-overlay{% if edit_fachbereich %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>{% if edit_fachbereich %}Fachbereich bearbeiten{% else %}Neuen Fachbereich anlegen{% endif %}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerFachbereich')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.governance_fachbereiche') }}">
         {% if edit_fachbereich %}<input type="hidden" name="fachbereich_id" value="{{ edit_fachbereich.id }}">{% endif %}
         <div class="ekey-form-grid">
@@ -32,9 +41,13 @@
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
             {% if edit_fachbereich %}
             <a href="{{ url_for('gui.governance_fachbereiche') }}" class="ekey-btn">Abbrechen</a>
+            {% else %}
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerFachbereich')">Abbrechen</button>
             {% endif %}
         </div>
     </form>
+</div>
+</div>
 </div>
 
 <div class="ekey-panel">

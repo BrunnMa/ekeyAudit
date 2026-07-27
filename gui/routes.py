@@ -165,12 +165,14 @@ def audit_plan():
             flash(warnung, "warning")
         else:
             flash("Audit-Plan angelegt.", "success")
-        return redirect(url_for("gui.audit_plan"))
+        return redirect(url_for("gui.audit_plan", programmFilter=data["auditProgrammId"]))
 
-    plaene = db.list_audit_plaene()
+    programm_filter = request.args.get("programmFilter") or None
+    plaene = db.list_audit_plaene(programm_filter) if programm_filter else []
     return render_template(
         "audit_plan.html",
         plaene=plaene,
+        programm_filter=programm_filter,
         programme=db.list_audit_programme(),
         prozesse=db.get_lookup("Look_QM_AuditProzess"),
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),

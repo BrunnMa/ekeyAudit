@@ -1,10 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Auditprogramm - {{ app_title }}{% endblock %}
+{% block title %}Auditplan anlegen - {{ app_title }}{% endblock %}
 {% block content %}
-<h1 class="ekey-h1">Auditprogramm</h1>
+<h1 class="ekey-h1">Auditplan anlegen</h1>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">{% if edit_programm %}Auditprogramm bearbeiten{% else %}Neues Auditprogramm anlegen{% endif %}</h2>
+<div class="ekey-form-actions" style="margin-bottom: 16px;">
+    <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuesAuditprogramm')">+ Neues Auditprogramm anlegen</button>
+</div>
+
+<div id="modalNeuesAuditprogramm" class="ekey-modal-overlay{% if edit_programm %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>{% if edit_programm %}Auditprogramm bearbeiten{% else %}Neues Auditprogramm anlegen{% endif %}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuesAuditprogramm')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.audit_programm') }}">
         {% if edit_programm %}
         <input type="hidden" name="programm_id" value="{{ edit_programm.id }}">
@@ -127,9 +136,13 @@
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
             {% if edit_programm %}
             <a href="{{ url_for('gui.audit_programm') }}" class="ekey-btn">Abbrechen</a>
+            {% else %}
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuesAuditprogramm')">Abbrechen</button>
             {% endif %}
         </div>
     </form>
+</div>
+</div>
 </div>
 
 {% if edit_programm %}
