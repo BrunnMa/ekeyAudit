@@ -69,6 +69,49 @@ document.addEventListener("click", function (e) {
 });
 
 // ---------------------------------------------------------------------
+// In allen Pop-up-Formularen (Dateneingabe) darf [Enter] das Pop-up nicht
+// schliessen/absenden, sondern springt nur zum naechsten Datenfeld. Schliessen
+// bzw. Speichern erfolgt ausschliesslich ueber die Buttons.
+// ---------------------------------------------------------------------
+
+function ekeyFocusableFields(container) {
+    var nodes = container.querySelectorAll(
+        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
+    );
+    return Array.prototype.filter.call(nodes, function (el) {
+        return el.offsetParent !== null; // nur sichtbare/aktive Felder beruecksichtigen
+    });
+}
+
+document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+
+    var target = e.target;
+    if (!target || !target.closest) return;
+
+    var modal = target.closest(".ekey-modal");
+    if (!modal) return; // ausserhalb von Pop-ups: normales Verhalten
+
+    // In Textareas soll [Enter] weiterhin einen Zeilenumbruch einfuegen.
+    if (target.tagName === "TEXTAREA") return;
+
+    // Auf Buttons (z.B. "Speichern", "Schliessen") soll [Enter] wie ein Klick wirken -
+    // das Schliessen/Absenden per Button ist ausdruecklich erlaubt.
+    if (target.tagName === "BUTTON") return;
+
+    e.preventDefault();
+
+    var fields = ekeyFocusableFields(modal);
+    var idx = fields.indexOf(target);
+    if (idx > -1 && idx + 1 < fields.length) {
+        fields[idx + 1].focus();
+        if (typeof fields[idx + 1].select === "function") {
+            fields[idx + 1].select();
+        }
+    }
+});
+
+// ---------------------------------------------------------------------
 // Startseite (AuditHome): ausgewaehltes Auditprogramm oeffnen
 // ---------------------------------------------------------------------
 

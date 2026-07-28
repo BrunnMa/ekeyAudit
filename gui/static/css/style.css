@@ -2,20 +2,21 @@
    Enterprise/technisches Design (MES/ERP/QM-Stil). Keine Animationen, keine runden/glassmorphen Elemente. */
 
 :root {
-  --ekey-primary: #46067A;
-  --ekey-primary-dark: #2E0451;
+  /* ekey-Blau (aus dem ekey-Logo ermittelt) ersetzt das vormalige Violett im gesamten GUI */
+  --ekey-primary: #04457A;
+  --ekey-primary-dark: #032E51;
   --ekey-text: #333333;
   --ekey-muted: #666666;
   --ekey-border: #BBBBBB;
   --ekey-btn-bg: #F7F0F0;
-  --ekey-btn-bg-active: #46067A;
-  --ekey-btn-text: #46067A;
+  --ekey-btn-bg-active: #04457A;
+  --ekey-btn-text: #04457A;
   --ekey-btn-text-active: #FFFFFF;
   --ekey-header-bg: #FFFFFF;
   --ekey-footer-bg: #F7F0F0;
-  --ekey-sidebar-bg: #FAF6FB;
-  --ekey-table-header: #F4ECF7;
-  --ekey-table-row-alt: #FBF7FC;
+  --ekey-sidebar-bg: #F7F9FB;
+  --ekey-table-header: #EFF3F6;
+  --ekey-table-row-alt: #F9FAFC;
   --ekey-error: #B00020;
   --ekey-error-bg: #FFE9EC;
   /* Ergaenzung fuer Statusanzeigen (z.B. DB-Verbindung), nicht Teil der urspruenglichen
@@ -170,6 +171,14 @@ a:hover { text-decoration: underline; }
 /* ---------------- Headings ---------------- */
 .ekey-h1 { font-size: 20px; color: var(--ekey-primary); margin: 0 0 12px 0; }
 .ekey-h2 { font-size: 14px; color: var(--ekey-primary); margin: 0 0 8px 0; border-bottom: 1px solid var(--ekey-border); padding-bottom: 4px; }
+.ekey-group-heading {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--ekey-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 4px 0 6px 0;
+}
 .ekey-muted { color: var(--ekey-muted); font-size: 10px; }
 .ekey-hint { color: var(--ekey-muted); font-size: 10px; font-style: italic; }
 
@@ -290,6 +299,12 @@ input:focus, select:focus, textarea:focus {
   vertical-align: top;
 }
 .ekey-table tbody tr:nth-child(even) { background: var(--ekey-table-row-alt); }
+
+/* Feste Spaltenbreiten (z.B. mehrere pro-Fachbereich gruppierte Tabellen auf einer Seite):
+   table-layout: fixed + identische colgroup-Breiten sorgen dafuer, dass jede Spalte ueber
+   alle Gruppen hinweg gleich breit bleibt, unabhaengig vom Inhalt der jeweiligen Gruppe. */
+.ekey-table-fixed { table-layout: fixed; }
+.ekey-table-fixed td, .ekey-table-fixed th { overflow-wrap: break-word; }
 
 /* ---------------- Flash Messages ---------------- */
 .ekey-flash-container { margin-bottom: 12px; }

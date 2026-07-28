@@ -3,8 +3,17 @@
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Prozesse erfassen</h1>
 
-<div class="ekey-form-actions" style="margin-bottom: 16px;">
+<div class="ekey-filter-row" style="align-items: flex-end; margin-bottom: 16px;">
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProzess')">+ Neuen Prozess anlegen</button>
+    <form method="get" action="{{ url_for('gui.governance_prozesse') }}" class="ekey-form-row" style="min-width: 240px;">
+        <label for="fachbereichFilter">Fachbereich</label>
+        <select id="fachbereichFilter" name="fachbereichFilter" onchange="this.form.submit()">
+            <option value="">-- Alle Fachbereiche --</option>
+            {% for fb in fachbereiche %}
+            <option value="{{ fb.id }}" {% if fachbereich_filter and fachbereich_filter|string == fb.id|string %}selected{% endif %}>{{ fb.fachbereich }}</option>
+            {% endfor %}
+        </select>
+    </form>
 </div>
 
 <div id="modalNeuerProzess" class="ekey-modal-overlay{% if edit_prozess %} ekey-modal-open{% endif %}">
@@ -16,6 +25,7 @@
 <div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.governance_prozesse') }}">
         {% if edit_prozess %}<input type="hidden" name="prozess_id" value="{{ edit_prozess.id }}">{% endif %}
+        <input type="hidden" name="fachbereichFilter" value="{{ fachbereich_filter or '' }}">
         <div class="ekey-form-grid">
             <div class="ekey-form-row">
                 <label for="processName">Prozessname</label>
@@ -27,12 +37,12 @@
             </div>
             <div class="ekey-form-row">
                 <label for="processOwner">Prozessverantwortlicher</label>
-                <input type="text" id="processOwner" name="processOwner" list="mitarbeiter_liste" autocomplete="off"
-                       placeholder="Namen eingeben zum Suchen..."
+                <input type="text" id="processOwner" name="processOwner" list="prozess_owner_liste" autocomplete="off"
+                       placeholder="Namen eingeben oder auswaehlen..."
                        value="{{ edit_prozess.processOwner if edit_prozess else '' }}">
-                <datalist id="mitarbeiter_liste">
-                    {% for m in mitarbeiter %}
-                    <option value="{{ m.name }}">{% if m.abteilung %}{{ m.abteilung }}{% endif %}</option>
+                <datalist id="prozess_owner_liste">
+                    {% for name in prozess_owner_namen %}
+                    <option value="{{ name }}"></option>
                     {% endfor %}
                 </datalist>
             </div>
@@ -41,7 +51,7 @@
                 <select id="fachbereich" name="fachbereich">
                     <option value="">-- auswaehlen --</option>
                     {% for fb in fachbereiche %}
-                    <option value="{{ fb.id }}" {% if edit_prozess and edit_prozess.fachbereich == fb.id %}selected{% endif %}>{{ fb.fachbereich }}</option>
+                    <option value="{{ fb.id }}" {% if edit_prozess and edit_prozess.fachbereich|string == fb.id|string %}selected{% endif %}>{{ fb.fachbereich }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -61,7 +71,7 @@
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
             {% if edit_prozess %}
-            <a href="{{ url_for('gui.governance_prozesse') }}" class="ekey-btn">Abbrechen</a>
+            <a href="{{ url_for('gui.governance_prozesse', fachbereichFilter=fachbereich_filter) }}" class="ekey-btn">Abbrechen</a>
             {% else %}
             <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerProzess')">Abbrechen</button>
             {% endif %}
@@ -73,10 +83,19 @@
 
 <div class="ekey-panel">
     <h2 class="ekey-h2">Vorhandene Prozesse</h2>
-    <table class="ekey-table">
-        <thead><tr><th>Name</th><th>Nummer</th><th>Owner</th><th>Fachbereich</th><th>Norm-Kapitel</th><th>Aktion</th></tr></thead>
+    {% for fachbereich_name, rows in prozesse_gruppiert %}
+    <h3 class="ekey-group-heading">{{ fachbereich_name }}</h3>
+    <table class="ekey-table ekey-table-fixed" style="margin-bottom: 16px;">
+        <colgroup>
+            <col style="width: 28%;">
+            <col style="width: 12%;">
+            <col style="width: 20%;">
+            <col style="width: 15%;">
+            <col style="width: 25%;">
+        </colgroup>
+        <thead><tr><th>Name</th><th>Nummer</th><th>Owner</th><th>Norm-Kapitel</th><th>Aktion</th></tr></thead>
         <tbody>
-        {% for p in prozesse %}
+        {% for p in rows %}
             <tr>
                 <td>
                     {% if p.link %}
@@ -87,21 +106,22 @@
                 </td>
                 <td>{{ p.processNumber }}</td>
                 <td>{{ p.processOwner }}</td>
-                <td>{{ p.fachbereichName }}</td>
                 <td>{{ p.normKapitel }}</td>
                 <td>
-                    <a href="{{ url_for('gui.governance_prozesse', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.governance_prozesse', edit=p.id, fachbereichFilter=fachbereich_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
                     <form method="post" action="{{ url_for('gui.governance_prozesse') }}" style="display:inline">
                         <input type="hidden" name="prozess_id" value="{{ p.id }}">
                         <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="fachbereichFilter" value="{{ fachbereich_filter or '' }}">
                         <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
                     </form>
                 </td>
             </tr>
-        {% else %}
-            <tr><td colspan="6">Keine Prozesse vorhanden.</td></tr>
         {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="ekey-muted">Keine Prozesse vorhanden.</p>
+    {% endfor %}
 </div>
 {% endblock %}

@@ -20,10 +20,10 @@ from reportlab.platypus import (
 import config
 import database as db
 
-PRIMARY_COLOR = colors.HexColor("#46067A")
+PRIMARY_COLOR = colors.HexColor("#04457A")  # ekey-Blau (aus dem ekey-Logo), ersetzt vormaliges Violett
 BORDER_COLOR = colors.HexColor("#BBBBBB")
-HEADER_BG = colors.HexColor("#F4ECF7")
-ROW_ALT = colors.HexColor("#FBF7FC")
+HEADER_BG = colors.HexColor("#EFF3F6")
+ROW_ALT = colors.HexColor("#F9FAFC")
 
 
 def _styles():

@@ -223,9 +223,11 @@ SCHEMA_STATEMENTS = [
         datumInterview TEXT,
         info TEXT,
         auditStatus INTEGER,
+        checklisteId INTEGER,
         FOREIGN KEY (auditProgrammId) REFERENCES STG_QM_AuditProgramm(id),
         FOREIGN KEY (auditProzess) REFERENCES Look_QM_AuditProzess(id),
-        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id)
+        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id),
+        FOREIGN KEY (checklisteId) REFERENCES STG_QM_AuditCheckliste(id)
     )
     """,
     """
@@ -239,6 +241,10 @@ SCHEMA_STATEMENTS = [
         linkId INTEGER,
         auditresultId INTEGER,
         auditResultInfo TEXT,
+        punkte INTEGER,
+        auditor TEXT,
+        bewertung TEXT,
+        beispiel TEXT,
         FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id)
     )
     """,
@@ -457,6 +463,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         datumInterview NVARCHAR(20),
         info NVARCHAR(MAX),
         auditStatus INT,
+        checklisteId INT,
         FOREIGN KEY (auditProgrammId) REFERENCES STG_QM_AuditProgramm(id),
         FOREIGN KEY (auditProzess) REFERENCES Look_QM_AuditProzess(id),
         FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id)
@@ -471,6 +478,10 @@ SCHEMA_STATEMENTS_MSSQL = [
         linkId INT,
         auditresultId INT,
         auditResultInfo NVARCHAR(MAX),
+        punkte INT,
+        auditor NVARCHAR(255),
+        bewertung NVARCHAR(MAX),
+        beispiel NVARCHAR(MAX),
         FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id)
     """),
     ("STG_QM_AuditAnhang", """
@@ -583,6 +594,80 @@ def init_db():
     _seed_example_mitarbeiter()
     _seed_default_settings()
     _fix_legacy_fachbereich_values()
+    _migrate_auditproofs_enrichment_columns()
+    _migrate_auditplan_checkliste_column()
+
+
+def _column_exists(cur, table, column):
+    if config.DB_BACKEND == "mssql":
+        cur.execute("""
+            SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = ? AND COLUMN_NAME = ?
+        """, (table, column))
+        return cur.fetchone() is not None
+    cur.execute(f"PRAGMA table_info({table})")
+    return any(row[1] == column for row in cur.fetchall())
+
+
+def _migrate_auditproofs_enrichment_columns():
+    """Nachtraeglich eingefuehrte Spalten fuer die direkt im Audit-Plan angereicherte
+    Checkliste (Punkte/Auditor/Bewertung/Beispiel je Proof). Bei bereits bestehenden
+    Datenbanken (aeltere Installation) werden fehlende Spalten per ALTER TABLE ergaenzt,
+    damit keine Daten verloren gehen. Bei Neuinstallationen enthaelt CREATE TABLE die
+    Spalten bereits, hier passiert dann nichts."""
+    columns = [
+        ("punkte", "INTEGER", "INT"),
+        ("auditor", "TEXT", "NVARCHAR(255)"),
+        ("bewertung", "TEXT", "NVARCHAR(MAX)"),
+        ("beispiel", "TEXT", "NVARCHAR(MAX)"),
+    ]
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        for column, sqlite_type, mssql_type in columns:
+            if _column_exists(cur, "STG_QM_AuditProofs", column):
+                continue
+            if config.DB_BACKEND == "mssql":
+                cur.execute(f"ALTER TABLE dbo.STG_QM_AuditProofs ADD {column} {mssql_type}")
+            else:
+                cur.execute(f"ALTER TABLE STG_QM_AuditProofs ADD COLUMN {column} {sqlite_type}")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_auditplan_checkliste_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditPlan.checklisteId: speichert die
+    zugeordnete Checkliste direkt am Plan-Eintrag, unabhaengig davon, ob die Checkliste
+    (noch) Proofs enthaelt. Vorher wurde die Zuordnung nur indirekt aus dem ersten kopierten
+    Proof abgeleitet - das fuehrte dazu, dass eine Checkliste ohne Pruefpunkte (Proofs) als
+    'nicht zugeordnet' erschien, obwohl sie sehr wohl gewaehlt und uebernommen wurde.
+    Bei bereits bestehenden Datenbanken wird die Spalte per ALTER TABLE ergaenzt und, sofern
+    moeglich, aus bereits vorhandenen Proofs rueckwirkend befuellt (Altbestand)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditPlan", "checklisteId"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditPlan ADD checklisteId INT")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditPlan ADD COLUMN checklisteId INTEGER")
+            conn.commit()
+    finally:
+        conn.close()
+
+    # Altbestand nachziehen: Plaene, die schon Proofs mit auditChecklisteID haben, aber noch
+    # kein checklisteId am Plan-Eintrag selbst gesetzt bekamen (weil sie vor dieser Migration
+    # angelegt wurden).
+    rows = query("""
+        SELECT pl.id AS plan_id, MIN(pf.auditChecklisteID) AS checkliste_id
+        FROM STG_QM_AuditPlan pl
+        JOIN STG_QM_AuditProofs pf ON pf.auditPlanId = pl.id
+        WHERE pl.checklisteId IS NULL AND pf.auditChecklisteID IS NOT NULL
+        GROUP BY pl.id
+    """)
+    for r in rows:
+        execute("UPDATE STG_QM_AuditPlan SET checklisteId=? WHERE id=?", (r["checkliste_id"], r["plan_id"]))
 
 
 def _fix_legacy_fachbereich_values():
@@ -813,18 +898,38 @@ def get_lookup_map(table, key_field, value_field):
     return {r[key_field]: r[value_field] for r in rows}
 
 
-def list_prozesse():
-    """Prozessliste (Look_QM_AuditProzess) inkl. Fachbereichsbezeichnung (per FK aufgeloest)."""
-    return query("""
-        SELECT p.*, fb.fachbereich AS fachbereichName
+def list_prozesse(fachbereich_id=None):
+    """Prozessliste (Look_QM_AuditProzess) inkl. Fachbereichsbezeichnung (per FK aufgeloest).
+    Sortiert nach Fachbereich (Prozesse ohne Fachbereich zuletzt), dann nach Prozessname,
+    damit die GUI die Liste gruppiert nach Fachbereich anzeigen kann. Optional auf einen
+    Fachbereich einschraenkbar (Filter in der GUI)."""
+    sql = """
+        SELECT p.*,
+               COALESCE(fb.fachbereich, '(ohne Fachbereich)') AS fachbereichName
         FROM Look_QM_AuditProzess p
         LEFT JOIN Look_QM_Fachbereich fb ON fb.id = p.fachbereich
-        ORDER BY p.processName
-    """)
+    """
+    params = ()
+    if fachbereich_id:
+        sql += " WHERE p.fachbereich = ?"
+        params = (fachbereich_id,)
+    sql += " ORDER BY CASE WHEN fb.fachbereich IS NULL THEN 1 ELSE 0 END, fachbereichName, p.processName"
+    return query(sql, params)
 
 
 def get_prozess(prozess_id):
     return query("SELECT * FROM Look_QM_AuditProzess WHERE id = ?", (prozess_id,), fetchone=True)
+
+
+def list_prozess_owner_namen():
+    """Distinkte, bereits erfasste Werte aus Look_QM_AuditProzess.processOwner - fuer die
+    Auswahl-Combobox im Feld 'Prozessverantwortlicher' (nur tatsaechlich schon eingegebene Namen)."""
+    rows = query("""
+        SELECT DISTINCT processOwner FROM Look_QM_AuditProzess
+        WHERE processOwner IS NOT NULL AND processOwner <> ''
+        ORDER BY processOwner
+    """)
+    return [r["processOwner"] for r in rows]
 
 
 def lookup_is_referenced(table, id_value):
@@ -994,20 +1099,123 @@ def delete_audit_plan(plan_id):
 
 
 def create_audit_plan(data):
-    return execute("""
-        INSERT INTO STG_QM_AuditPlan
-        (auditProgrammId, fachbereich, auditProzess, verantwortlich, datumAuditEnde,
-         datumInterview, info, auditStatus)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
+    """Legt einen neuen Audit-Plan-Eintrag an und liefert zuverlaessig dessen neue id zurueck.
+
+    Wichtig: die zurueckgelieferte id wird im Aufrufer (routes.py) sofort weiterverwendet, um
+    ggf. eine Checkliste (samt Proofs) in genau diesen Plan zu uebernehmen - ist die id falsch
+    bzw. None, schlaegt der nachfolgende INSERT in STG_QM_AuditProofs mit einem NOT-NULL-Fehler
+    fehl. Fuer SQL Server wird deshalb bewusst die OUTPUT-Klausel statt SCOPE_IDENTITY() (siehe
+    _get_last_insert_id) verwendet: OUTPUT INSERTED.id liest die id direkt aus der INSERT-
+    Anweisung selbst und ist damit unabhaengig von Sitzungs-/Gueltigkeitsbereichs-Eigenheiten,
+    die SCOPE_IDENTITY() in der Praxis (produktive SQL-Server-Umgebung) NULL liefern liessen."""
+    params = (
         data.get("auditProgrammId"), data.get("fachbereich"), data.get("auditProzess"),
         data.get("verantwortlich"), data.get("datumAuditEnde"), data.get("datumInterview"),
         data.get("info"), data.get("auditStatus"),
-    ))
+    )
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if config.DB_BACKEND == "mssql":
+            cur.execute("""
+                INSERT INTO STG_QM_AuditPlan
+                (auditProgrammId, fachbereich, auditProzess, verantwortlich, datumAuditEnde,
+                 datumInterview, info, auditStatus)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, params)
+            row = cur.fetchone()
+            new_id = row[0] if row else None
+        else:
+            cur.execute("""
+                INSERT INTO STG_QM_AuditPlan
+                (auditProgrammId, fachbereich, auditProzess, verantwortlich, datumAuditEnde,
+                 datumInterview, info, auditStatus)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, params)
+            new_id = cur.lastrowid
+        conn.commit()
+        return new_id
+    finally:
+        conn.close()
 
 
 def update_audit_plan_status(plan_id, status_id):
     execute("UPDATE STG_QM_AuditPlan SET auditStatus=? WHERE id=?", (status_id, plan_id))
+
+
+def update_audit_plan(plan_id, data):
+    execute("""
+        UPDATE STG_QM_AuditPlan SET
+        auditProgrammId=?, fachbereich=?, auditProzess=?, verantwortlich=?,
+        datumAuditEnde=?, datumInterview=?, info=?, auditStatus=?
+        WHERE id=?
+    """, (
+        data.get("auditProgrammId"), data.get("fachbereich"), data.get("auditProzess"),
+        data.get("verantwortlich"), data.get("datumAuditEnde"), data.get("datumInterview"),
+        data.get("info"), data.get("auditStatus"), plan_id,
+    ))
+
+
+def update_proof(proof_id, data):
+    """Aktualisiert einen Proof im Audit-Plan vollstaendig: sowohl die aus der Checklisten-
+    Vorlage uebernommene (oder manuell erfasste) Frage/Norm-Kapitel als auch die im Audit-Plan
+    angereicherten Felder Punkte/Auditor/Bewertung/Beispiel - unabhaengig vom eigentlichen
+    Ergebnis-/Abweichungsworkflow unter 'Audit durchfuehren'."""
+    execute("""
+        UPDATE STG_QM_AuditProofs SET
+        auditFrage=?, normKapitel=?, punkte=?, auditor=?, bewertung=?, beispiel=?
+        WHERE id=?
+    """, (
+        data.get("auditFrage"), data.get("normKapitel"), data.get("punkte"),
+        data.get("auditor"), data.get("bewertung"), data.get("beispiel"), proof_id,
+    ))
+
+
+def add_manual_proof_to_plan(plan_id, data):
+    """Fuegt einen Proof manuell direkt in einen Audit-Plan-Eintrag ein (nicht aus einer
+    Checklisten-Vorlage uebernommen). auditChecklisteID bleibt dabei NULL - so bleibt
+    nachvollziehbar, dass dieser Proof nicht aus einer Vorlage stammt."""
+    return execute("""
+        INSERT INTO STG_QM_AuditProofs
+        (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo,
+         punkte, auditor, bewertung, beispiel)
+        VALUES (?, NULL, ?, ?, '', ?, ?, ?, ?)
+    """, (
+        plan_id, data.get("auditFrage"), data.get("normKapitel"),
+        data.get("punkte"), data.get("auditor"), data.get("bewertung"), data.get("beispiel"),
+    ))
+
+
+def delete_proof(proof_id):
+    """Loescht einen einzelnen Proof aus einem Audit-Plan (z.B. um einen versehentlich
+    manuell angelegten Proof wieder zu entfernen) inkl. aller davon abhaengigen Ergebnisse,
+    Abweichungen, Massnahmen, Interviews, Anhaenge und Links."""
+    execute("""
+        DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID IN (
+            SELECT m.id FROM STG_QM_AuditMassnahme m
+            JOIN STG_QM_AuditAbweichung a ON a.id = m.auditAbweichungID
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            WHERE r.auditProofsId = ?
+        )
+    """, (proof_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditMassnahme WHERE auditAbweichungID IN (
+            SELECT a.id FROM STG_QM_AuditAbweichung a
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            WHERE r.auditProofsId = ?
+        )
+    """, (proof_id,))
+    execute("""
+        DELETE FROM STG_QM_AuditAbweichung WHERE auditResultID IN (
+            SELECT id FROM STG_QM_AuditResult WHERE auditProofsId = ?
+        )
+    """, (proof_id,))
+    execute("DELETE FROM STG_QM_AuditResult WHERE auditProofsId = ?", (proof_id,))
+    execute("DELETE FROM STG_QM_AuditInterview WHERE auditProofsId = ?", (proof_id,))
+    execute("DELETE FROM STG_QM_AuditAnhang WHERE auditProofsId = ?", (proof_id,))
+    execute("DELETE FROM STG_QM_AuditLink WHERE auditProofsId = ?", (proof_id,))
+    execute("DELETE FROM STG_QM_AuditProofs WHERE id = ?", (proof_id,))
 
 
 # --------------------------------------------------------------------------
@@ -1078,9 +1286,26 @@ def audit_proofs_exist_for_plan(plan_id):
 
 
 def copy_checkliste_to_proofs(plan_id, checkliste_id):
-    """Kopiert die Fragen einer Checkliste-Vorlage in STG_QM_AuditProofs fuer einen konkreten Plan (1x pro Plan)."""
+    """Kopiert die Fragen einer Checkliste-Vorlage in STG_QM_AuditProofs fuer einen konkreten Plan
+    (1x pro Plan) und speichert die Zuordnung zusaetzlich direkt am Plan-Eintrag
+    (STG_QM_AuditPlan.checklisteId) - auch dann, wenn die Checkliste selbst (noch) keine
+    Proofs/Pruefpunkte enthaelt. Ohne das direkte Speichern am Plan waere eine Checkliste ohne
+    Proofs nach dem Uebernehmen nicht mehr von 'keine Checkliste zugeordnet' zu unterscheiden.
+
+    Rueckgabe: None, wenn diesem Plan bereits eine Checkliste zugeordnet ist (keine Aktion) -
+    oder wenn plan_id/checkliste_id fehlen (z.B. weil der Plan-Eintrag nicht angelegt werden
+    konnte); sonst die Anzahl der in diesem Aufruf kopierten Proofs (kann 0 sein)."""
+    if not plan_id or not checkliste_id:
+        return None
+    plan = get_audit_plan(plan_id)
+    if plan and plan.get("checklisteId"):
+        return None
     if audit_proofs_exist_for_plan(plan_id):
-        return False
+        # Altbestand: Proofs existieren schon (z.B. Datenbank vor Einfuehrung von
+        # checklisteId), aber die Zuordnung am Plan fehlt noch - nur nachtragen, nichts
+        # erneut kopieren.
+        execute("UPDATE STG_QM_AuditPlan SET checklisteId=? WHERE id=?", (checkliste_id, plan_id))
+        return 0
     proofs = list_checkliste_proofs(checkliste_id)
     for p in proofs:
         execute("""
@@ -1088,7 +1313,8 @@ def copy_checkliste_to_proofs(plan_id, checkliste_id):
             (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo)
             VALUES (?, ?, ?, ?, ?)
         """, (plan_id, checkliste_id, p["auditFrage"], p["normKapitel"], p["auditResultInfo"]))
-    return True
+    execute("UPDATE STG_QM_AuditPlan SET checklisteId=? WHERE id=?", (checkliste_id, plan_id))
+    return len(proofs)
 
 
 def list_proofs_for_plan(plan_id):

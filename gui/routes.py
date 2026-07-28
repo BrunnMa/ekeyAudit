@@ -2,6 +2,7 @@
 gui/routes.py - Alle Flask-Routen der ekeyAudit-Anwendung (ein Blueprint 'gui').
 """
 
+import itertools
 import os
 import threading
 import time
@@ -146,6 +147,7 @@ def audit_programm_ziel_delete(ziel_id):
 def audit_plan():
     warnung = None
     if request.method == "POST":
+        plan_id = request.form.get("plan_id")
         data = {
             "auditProgrammId": request.form.get("auditProgrammId"),
             "fachbereich": request.form.get("fachbereich"),
@@ -167,15 +169,71 @@ def audit_plan():
                         f"Warnung: Das Datum bei '{feld}' ({wert}) liegt ausserhalb des "
                         f"Programmzeitraums ({start} bis {ende}). Der Eintrag wurde trotzdem gespeichert."
                     )
-        db.create_audit_plan(data)
+
+        if plan_id:
+            db.update_audit_plan(plan_id, data)
+            aktueller_plan_id = int(plan_id)
+            erfolg_text = "Audit-Plan aktualisiert."
+        else:
+            aktueller_plan_id = db.create_audit_plan(data)
+            erfolg_text = "Audit-Plan angelegt."
+
+        if not aktueller_plan_id:
+            # Sollte nach dem Anlegen praktisch nie vorkommen (siehe create_audit_plan) -
+            # ohne diese Absicherung wuerde ein spaeterer Checkliste-Transfer mit einem
+            # rohen Datenbankfehler abbrechen, statt einer verstaendlichen Meldung.
+            flash("Der Audit-Plan-Eintrag konnte nicht angelegt/ermittelt werden. Bitte erneut versuchen.", "error")
+            return redirect(url_for("gui.audit_plan", programmFilter=data["auditProgrammId"]))
+
+        # Checkliste (Vorlage aus Audit Governance) einmalig als konkrete Proofs
+        # in diesen Audit-Plan-Eintrag uebernehmen - inkl. der Proofs der Vorlage.
+        # Die Zuordnung selbst wird IMMER am Plan-Eintrag gespeichert (auch wenn die
+        # Checkliste keine Proofs enthaelt), siehe copy_checkliste_to_proofs().
+        checkliste_id = request.form.get("checkliste_id") or None
+        checkliste_uebernommen = False
+        if checkliste_id:
+            anzahl_kopiert = db.copy_checkliste_to_proofs(aktueller_plan_id, checkliste_id)
+            if anzahl_kopiert is not None:
+                checkliste_uebernommen = True
+                if anzahl_kopiert > 0:
+                    erfolg_text += f" Checkliste wurde uebernommen ({anzahl_kopiert} Proof(s))."
+                else:
+                    erfolg_text += (
+                        " Checkliste wurde zugeordnet - sie enthaelt aktuell allerdings keine "
+                        "Proofs/Pruefpunkte (unter Audit Governance > Checklisten ergaenzbar)."
+                    )
+
         if warnung:
             flash(warnung, "warning")
         else:
-            flash("Audit-Plan angelegt.", "success")
+            flash(erfolg_text, "success")
+
+        if checkliste_uebernommen:
+            # Direkt im Bearbeiten-Modus weiter zu den uebernommenen Proofs, damit sie
+            # gleich angereichert (Punkte/Auditor/Bewertung/Beispiel) werden koennen.
+            return redirect(url_for(
+                "gui.audit_plan", edit=aktueller_plan_id, programmFilter=data["auditProgrammId"]
+            ))
         return redirect(url_for("gui.audit_plan", programmFilter=data["auditProgrammId"]))
 
     programm_filter = request.args.get("programmFilter") or None
     plaene = db.list_audit_plaene(programm_filter) if programm_filter else []
+
+    edit_id = request.args.get("edit")
+    edit_plan = db.get_audit_plan(edit_id) if edit_id else None
+    edit_plan_proofs = db.list_proofs_for_plan(edit_id) if edit_id else []
+    assigned_checkliste_id = edit_plan.get("checklisteId") if edit_plan else None
+    assigned_checkliste_name = _checkliste_name(assigned_checkliste_id)
+
+    # Fuer den direkten [Checkliste]-Button in der Liste: Proofs + Checklisten-Name
+    # je Audit-Plan-Eintrag vorab laden (kein zusaetzlicher Klick ueber "Bearbeiten" noetig).
+    checkliste_plan_open_id = request.args.get("checklistePlan")
+    proofs_by_plan = {}
+    checkliste_name_by_plan = {}
+    for pl in plaene:
+        proofs_by_plan[pl["id"]] = db.list_proofs_for_plan(pl["id"])
+        checkliste_name_by_plan[pl["id"]] = _checkliste_name(pl.get("checklisteId"))
+
     return render_template(
         "audit_plan.html",
         plaene=plaene,
@@ -184,7 +242,26 @@ def audit_plan():
         prozesse=db.get_lookup("Look_QM_AuditProzess"),
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
+        checklisten=db.list_checklisten(),
+        edit_plan=edit_plan,
+        edit_plan_proofs=edit_plan_proofs,
+        assigned_checkliste_id=assigned_checkliste_id,
+        assigned_checkliste_name=assigned_checkliste_name,
+        proofs_by_plan=proofs_by_plan,
+        checkliste_name_by_plan=checkliste_name_by_plan,
+        checkliste_plan_open_id=checkliste_plan_open_id,
     )
+
+
+def _checkliste_name(checkliste_id):
+    """Liefert die Bezeichnung einer Checkliste zu einer id, oder None.
+    Die Zuordnung selbst liegt direkt an STG_QM_AuditPlan.checklisteId (siehe
+    db.copy_checkliste_to_proofs) und ist damit unabhaengig davon erkennbar, ob die
+    Checkliste (noch) Proofs/Pruefpunkte enthaelt."""
+    if not checkliste_id:
+        return None
+    checkliste = db.get_checkliste(checkliste_id)
+    return checkliste["bezeichnung"] if checkliste else None
 
 
 @gui.route("/audit-plan/<int:plan_id>/delete", methods=["POST"])
@@ -196,6 +273,99 @@ def audit_plan_delete(plan_id):
     if programm_filter:
         return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
     return redirect(url_for("gui.audit_plan"))
+
+
+@gui.route("/audit-plan/proof/<int:proof_id>/update", methods=["POST"])
+@security.login_required
+def audit_plan_proof_update(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    punkte_raw = request.form.get("punkte")
+    try:
+        punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
+    except ValueError:
+        punkte = None
+    data = {
+        "auditFrage": request.form.get("auditFrage"),
+        "normKapitel": request.form.get("normKapitel"),
+        "punkte": punkte,
+        "auditor": request.form.get("auditor") or None,
+        "bewertung": request.form.get("bewertung") or None,
+        "beispiel": request.form.get("beispiel") or None,
+    }
+    db.update_proof(proof_id, data)
+    flash("Proof gespeichert.", "success")
+    programm_filter = request.form.get("programmFilter") or None
+    plan_id = proof["auditPlanId"]
+
+    # Je nachdem, ob die Aenderung ueber das "Bearbeiten"-Pop-up oder direkt ueber den
+    # [Checkliste]-Button in der Liste erfolgt ist, wird danach das passende Pop-up
+    # wieder geoeffnet (statt immer den Bearbeiten-Dialog aufzureissen).
+    source = request.form.get("source")
+    if source == "list":
+        return redirect(url_for(
+            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
+        ))
+    return redirect(url_for(
+        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+    ))
+
+
+@gui.route("/audit-plan/<int:plan_id>/proof/add", methods=["POST"])
+@security.login_required
+def audit_plan_proof_add(plan_id):
+    if not db.get_audit_plan(plan_id):
+        abort(404)
+    punkte_raw = request.form.get("punkte")
+    try:
+        punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
+    except ValueError:
+        punkte = None
+    data = {
+        "auditFrage": request.form.get("auditFrage", "").strip(),
+        "normKapitel": request.form.get("normKapitel"),
+        "punkte": punkte,
+        "auditor": request.form.get("auditor") or None,
+        "bewertung": request.form.get("bewertung") or None,
+        "beispiel": request.form.get("beispiel") or None,
+    }
+    if not data["auditFrage"]:
+        flash("Bitte eine Frage/einen Pruefpunkt-Text angeben.", "error")
+    else:
+        db.add_manual_proof_to_plan(plan_id, data)
+        flash("Proof manuell hinzugefuegt.", "success")
+
+    programm_filter = request.form.get("programmFilter") or None
+    source = request.form.get("source")
+    if source == "list":
+        return redirect(url_for(
+            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
+        ))
+    return redirect(url_for(
+        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+    ))
+
+
+@gui.route("/audit-plan/proof/<int:proof_id>/delete", methods=["POST"])
+@security.login_required
+def audit_plan_proof_delete(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    plan_id = proof["auditPlanId"]
+    db.delete_proof(proof_id)
+    flash("Proof geloescht.", "success")
+
+    programm_filter = request.form.get("programmFilter") or None
+    source = request.form.get("source")
+    if source == "list":
+        return redirect(url_for(
+            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
+        ))
+    return redirect(url_for(
+        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+    ))
 
 
 # --------------------------------------------------------------------------
@@ -218,12 +388,14 @@ def audit_durchfuehren_start(plan_id):
     if not checkliste_id:
         flash("Bitte eine Checkliste auswaehlen.", "error")
         return redirect(url_for("gui.audit_durchfuehren"))
-    kopiert = db.copy_checkliste_to_proofs(plan_id, checkliste_id)
+    anzahl_kopiert = db.copy_checkliste_to_proofs(plan_id, checkliste_id)
     db.update_audit_plan_status(plan_id, 3)  # In Arbeit
-    if kopiert:
-        flash("Checkliste wurde als Proofs uebernommen. Audit ist jetzt 'In Arbeit'.", "success")
+    if anzahl_kopiert is not None and anzahl_kopiert > 0:
+        flash(f"Checkliste wurde als {anzahl_kopiert} Proof(s) uebernommen. Audit ist jetzt 'In Arbeit'.", "success")
+    elif anzahl_kopiert == 0:
+        flash("Checkliste wurde zugeordnet, enthaelt aktuell aber keine Proofs. Audit ist jetzt 'In Arbeit'.", "warning")
     else:
-        flash("Fuer diesen Plan wurden bereits Proofs angelegt.", "warning")
+        flash("Fuer diesen Plan ist bereits eine Checkliste zugeordnet.", "warning")
     return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=plan_id))
 
 
@@ -369,14 +541,28 @@ def governance_prozesse():
             else:
                 db.add_lookup_row("Look_QM_AuditProzess", fields)
                 flash("Prozess angelegt.", "success")
-        return redirect(url_for("gui.governance_prozesse"))
+        # Ein aktiver Fachbereich-Filter bleibt beim Anlegen/Bearbeiten/Loeschen erhalten -
+        # er wird nur zurueckgesetzt, wenn die Seite komplett neu (ohne Query-Parameter) aufgerufen wird.
+        fachbereich_filter = request.form.get("fachbereichFilter") or None
+        return redirect(url_for("gui.governance_prozesse", fachbereichFilter=fachbereich_filter))
 
     edit_id = request.args.get("edit")
+    fachbereich_filter = request.args.get("fachbereichFilter") or None
+    prozesse = db.list_prozesse(fachbereich_filter)
+    # Bereits per SQL nach Fachbereich sortiert (ohne Fachbereich zuletzt) - hier nur noch
+    # in aufeinanderfolgende Gruppen zusammenfassen, ohne die Reihenfolge neu zu sortieren
+    # (das wuerde z.B. "(ohne Fachbereich)" per Jinja-groupby faelschlich nach vorne holen).
+    prozesse_gruppiert = [
+        (name, list(rows))
+        for name, rows in itertools.groupby(prozesse, key=lambda p: p["fachbereichName"])
+    ]
     return render_template(
         "governance_prozesse.html",
-        prozesse=db.list_prozesse(),
+        prozesse=prozesse,
+        prozesse_gruppiert=prozesse_gruppiert,
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),
-        mitarbeiter=db.list_mitarbeiter(),
+        prozess_owner_namen=db.list_prozess_owner_namen(),
+        fachbereich_filter=fachbereich_filter,
         edit_prozess=db.get_prozess(edit_id) if edit_id else None,
     )
 

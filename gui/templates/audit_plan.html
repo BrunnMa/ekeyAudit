@@ -7,68 +7,88 @@
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerAuditplanEintrag')">+ Neuer Auditplan-Eintrag erstellen</button>
 </div>
 
-<div id="modalNeuerAuditplanEintrag" class="ekey-modal-overlay">
-<div class="ekey-modal">
+<div id="modalNeuerAuditplanEintrag" class="ekey-modal-overlay{% if edit_plan %} ekey-modal-open{% endif %}">
+<div class="ekey-modal" style="max-width: 900px;">
 <div class="ekey-modal-header">
-    <h2>Neuen Auditplan-Eintrag erstellen</h2>
+    <h2>{% if edit_plan %}Auditplan-Eintrag bearbeiten{% else %}Neuen Auditplan-Eintrag erstellen{% endif %}</h2>
     <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerAuditplanEintrag')" title="Schliessen">&times;</button>
 </div>
 <div class="ekey-modal-body">
     <p class="ekey-muted">Hinweis: Liegt das Interview- oder Auditende-Datum ausserhalb des Start-/End-Datums
         des gewaehlten Auditprogramms, wird nach dem Speichern eine Warnung angezeigt. Das Speichern ist dennoch moeglich.</p>
     <form method="post" action="{{ url_for('gui.audit_plan') }}">
+        {% if edit_plan %}<input type="hidden" name="plan_id" value="{{ edit_plan.id }}">{% endif %}
         <div class="ekey-form-grid">
             <div class="ekey-form-row">
                 <label for="auditProgrammId">Auditprogramm</label>
                 <select id="auditProgrammId" name="auditProgrammId" required>
                     <option value="">-- auswaehlen --</option>
                     {% for p in programme %}
-                    <option value="{{ p.id }}">{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }})</option>
+                    <option value="{{ p.id }}" {% if edit_plan and edit_plan.auditProgrammId|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }})</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="ekey-form-row">
                 <label for="fachbereich">Fachbereich</label>
-                <select id="fachbereich" name="fachbereich" onchange="ekeyFachbereichChange(this)">
+                <select id="fachbereich" name="fachbereich" onchange="ekeyFachbereichChange(this); ekeyFilterProzessByFachbereich();">
                     <option value="">-- auswaehlen --</option>
                     {% for fb in fachbereiche %}
-                    <option value="{{ fb.id }}" data-leitung="{{ fb.leitung or '' }}">{{ fb.fachbereich }}</option>
+                    <option value="{{ fb.id }}" data-leitung="{{ fb.leitung or '' }}" {% if edit_plan and edit_plan.fachbereich|string == fb.id|string %}selected{% endif %}>{{ fb.fachbereich }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="ekey-form-row">
                 <label for="auditProzess">Prozess</label>
-                <select id="auditProzess" name="auditProzess">
+                <select id="auditProzess" name="auditProzess" onchange="ekeySyncFachbereichFromProzess();">
                     <option value="">-- auswaehlen --</option>
                     {% for pr in prozesse %}
-                    <option value="{{ pr.id }}">{{ pr.processName }}</option>
+                    <option value="{{ pr.id }}" data-fachbereich="{{ pr.fachbereich or '' }}" {% if edit_plan and edit_plan.auditProzess|string == pr.id|string %}selected{% endif %}>{{ pr.processName }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="ekey-form-row">
                 <label for="verantwortlich">Verantwortlich</label>
-                <input type="text" id="verantwortlich" name="verantwortlich">
+                <input type="text" id="verantwortlich" name="verantwortlich" value="{{ edit_plan.verantwortlich if edit_plan else '' }}">
                 <span class="ekey-hint">Wird bei Auswahl des Fachbereichs automatisch aus der Leitung uebernommen (kann angepasst werden).</span>
             </div>
             <div class="ekey-form-row">
                 <label for="datumAuditEnde">Datum Audit-Ende</label>
-                <input type="date" id="datumAuditEnde" name="datumAuditEnde">
+                <input type="date" id="datumAuditEnde" name="datumAuditEnde" value="{{ edit_plan.datumAuditEnde if edit_plan else '' }}">
             </div>
             <div class="ekey-form-row">
                 <label for="datumInterview">Datum Interview</label>
-                <input type="date" id="datumInterview" name="datumInterview">
+                <input type="date" id="datumInterview" name="datumInterview" value="{{ edit_plan.datumInterview if edit_plan else '' }}">
             </div>
             <div class="ekey-form-row">
                 <label for="auditStatus">Status</label>
                 <select id="auditStatus" name="auditStatus">
                     {% for s in audit_status %}
-                    <option value="{{ s.id }}">{{ s.auditStatus }}</option>
+                    <option value="{{ s.id }}" {% if edit_plan and edit_plan.auditStatus|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
                     {% endfor %}
                 </select>
             </div>
+            <div class="ekey-form-row">
+                <label for="checkliste_id">Checkliste</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <select id="checkliste_id" name="checkliste_id" {% if assigned_checkliste_id %}disabled{% endif %} style="flex: 1;">
+                        <option value="">-- keine --</option>
+                        {% for c in checklisten %}
+                        <option value="{{ c.id }}" {% if assigned_checkliste_id and assigned_checkliste_id|string == c.id|string %}selected{% endif %}>{{ c.bezeichnung }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if assigned_checkliste_id %}
+                    <span class="ekey-hint" style="white-space: nowrap;">Zugeordnet: <strong>{{ assigned_checkliste_name or '-' }}</strong></span>
+                    {% endif %}
+                </div>
+                {% if assigned_checkliste_id %}
+                <span class="ekey-hint">Checkliste wurde bereits uebernommen (Inhalt siehe unten) und kann hier nicht mehr gewechselt werden.</span>
+                {% else %}
+                <span class="ekey-hint">Beim Speichern wird der Inhalt der gewaehlten Checkliste (inkl. Proofs) komplett in diesen Audit-Plan-Eintrag uebernommen.</span>
+                {% endif %}
+            </div>
             <div class="ekey-form-row ekey-form-row-wide">
                 <label for="info">Info</label>
-                <textarea id="info" name="info" rows="2"></textarea>
+                <textarea id="info" name="info" rows="2">{{ edit_plan.info if edit_plan else '' }}</textarea>
             </div>
         </div>
         <div class="ekey-form-actions">
@@ -76,6 +96,109 @@
             <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerAuditplanEintrag')">Abbrechen</button>
         </div>
     </form>
+
+    {% if edit_plan %}
+    <hr class="ekey-form-hr">
+    <h3 class="ekey-group-heading">{% if assigned_checkliste_name %}Checkliste: {{ assigned_checkliste_name }} - {% endif %}Proofs</h3>
+    {% if assigned_checkliste_id and not edit_plan_proofs %}
+    <p class="ekey-muted">Die zugeordnete Checkliste "{{ assigned_checkliste_name or '-' }}" enthaelt aktuell keine
+        Proofs/Pruefpunkte aus der Vorlage. Proofs koennen weiter unten manuell hinzugefuegt werden.</p>
+    {% elif not edit_plan_proofs %}
+    <p class="ekey-muted">Es sind noch keine Proofs erfasst. Proofs koennen entweder ueber eine zugeordnete
+        Checkliste uebernommen oder weiter unten manuell hinzugefuegt werden.</p>
+    {% else %}
+    <p class="ekey-muted">Frage, Norm-Kapitel, Punkte, Auditor, Bewertung und Beispiel koennen hier je Proof
+        bearbeitet und pro Zeile einzeln gespeichert werden.</p>
+    {% endif %}
+
+    {% if edit_plan_proofs %}
+    {% for pf in edit_plan_proofs %}
+    <form id="proofForm{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_update', proof_id=pf.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="edit">
+    </form>
+    <form id="proofDeleteForm{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="edit">
+    </form>
+    {% endfor %}
+
+    <table class="ekey-table">
+        <thead>
+        <tr>
+            <th>Frage</th><th>Norm-Kapitel</th><th>Punkte</th><th>Auditor</th>
+            <th>Bewertung</th><th>Beispiel</th><th>Aktion</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for pf in edit_plan_proofs %}
+            <tr>
+                <td>
+                    <input type="text" name="auditFrage" form="proofForm{{ pf.id }}" value="{{ pf.auditFrage or '' }}">
+                </td>
+                <td>
+                    <input type="text" name="normKapitel" form="proofForm{{ pf.id }}" value="{{ pf.normKapitel or '' }}" style="width: 90px;">
+                </td>
+                <td>
+                    <input type="number" name="punkte" form="proofForm{{ pf.id }}"
+                           value="{{ pf.punkte if pf.punkte is not none else '' }}" style="width: 70px;">
+                </td>
+                <td>
+                    <input type="text" name="auditor" form="proofForm{{ pf.id }}" value="{{ pf.auditor or '' }}">
+                </td>
+                <td>
+                    <textarea name="bewertung" form="proofForm{{ pf.id }}" rows="2">{{ pf.bewertung or '' }}</textarea>
+                </td>
+                <td>
+                    <textarea name="beispiel" form="proofForm{{ pf.id }}" rows="2">{{ pf.beispiel or '' }}</textarea>
+                </td>
+                <td>
+                    <button type="submit" form="proofForm{{ pf.id }}" class="ekey-btn ekey-btn-small">Speichern</button>
+                    <button type="submit" form="proofDeleteForm{{ pf.id }}" class="ekey-btn ekey-btn-small"
+                            onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <hr class="ekey-form-hr">
+    <h4 class="ekey-group-heading">Neuen Proof manuell hinzufuegen</h4>
+    <form method="post" action="{{ url_for('gui.audit_plan_proof_add', plan_id=edit_plan.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="edit">
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofFrageEdit{{ edit_plan.id }}">Frage</label>
+                <input type="text" id="newProofFrageEdit{{ edit_plan.id }}" name="auditFrage" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofNormEdit{{ edit_plan.id }}">Norm-Kapitel</label>
+                <input type="text" id="newProofNormEdit{{ edit_plan.id }}" name="normKapitel">
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofPunkteEdit{{ edit_plan.id }}">Punkte</label>
+                <input type="number" id="newProofPunkteEdit{{ edit_plan.id }}" name="punkte">
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofAuditorEdit{{ edit_plan.id }}">Auditor</label>
+                <input type="text" id="newProofAuditorEdit{{ edit_plan.id }}" name="auditor">
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofBewertungEdit{{ edit_plan.id }}">Bewertung</label>
+                <textarea id="newProofBewertungEdit{{ edit_plan.id }}" name="bewertung" rows="2"></textarea>
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofBeispielEdit{{ edit_plan.id }}">Beispiel</label>
+                <textarea id="newProofBeispielEdit{{ edit_plan.id }}" name="beispiel" rows="2"></textarea>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Proof hinzufuegen</button>
+        </div>
+    </form>
+    {% endif %}
 </div>
 </div>
 </div>
@@ -116,7 +239,8 @@
                 <td>{{ pl.datumInterview }}</td>
                 <td>{{ pl.statusName }}</td>
                 <td>
-                    <a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small">Zur Checkliste</a>
+                    <a href="{{ url_for('gui.audit_plan', edit=pl.id, programmFilter=programm_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalChecklistePlan{{ pl.id }}')">Checkliste</button>
                     <button type="button" class="ekey-btn ekey-btn-small"
                             onclick="ekeyConfirmDeletePlan('{{ url_for('gui.audit_plan_delete', plan_id=pl.id) }}')">Loeschen</button>
                 </td>
@@ -128,6 +252,119 @@
     </table>
     {% endif %}
 </div>
+
+{% for pl in plaene %}
+<div id="modalChecklistePlan{{ pl.id }}" class="ekey-modal-overlay{% if checkliste_plan_open_id and checkliste_plan_open_id|string == pl.id|string %} ekey-modal-open{% endif %}">
+<div class="ekey-modal" style="max-width: 900px;">
+<div class="ekey-modal-header">
+    <h2>Checkliste{% if checkliste_name_by_plan.get(pl.id) %}: {{ checkliste_name_by_plan.get(pl.id) }}{% endif %} - Plan #{{ pl.id }}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalChecklistePlan{{ pl.id }}')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    {% set proofs = proofs_by_plan.get(pl.id, []) %}
+    {% set zugeordnete_checkliste = checkliste_name_by_plan.get(pl.id) %}
+    {% if zugeordnete_checkliste and not proofs %}
+    <p class="ekey-muted">Die Checkliste "{{ zugeordnete_checkliste }}" ist zugeordnet, enthaelt aber aktuell keine
+        Proofs/Pruefpunkte aus der Vorlage. Proofs koennen weiter unten manuell hinzugefuegt werden.</p>
+    {% elif not proofs %}
+    <p class="ekey-muted">Es sind noch keine Proofs erfasst. Proofs koennen entweder ueber eine ueber "Bearbeiten"
+        zugeordnete Checkliste uebernommen oder weiter unten manuell hinzugefuegt werden.</p>
+    {% else %}
+    <p class="ekey-muted">Frage, Norm-Kapitel, Punkte, Auditor, Bewertung und Beispiel koennen hier je Proof
+        bearbeitet und pro Zeile einzeln gespeichert werden.</p>
+    {% endif %}
+
+    {% if proofs %}
+    {% for pf in proofs %}
+    <form id="proofFormList{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_update', proof_id=pf.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="list">
+    </form>
+    <form id="proofDeleteFormList{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="list">
+    </form>
+    {% endfor %}
+
+    <table class="ekey-table">
+        <thead>
+        <tr>
+            <th>Frage</th><th>Norm-Kapitel</th><th>Punkte</th><th>Auditor</th>
+            <th>Bewertung</th><th>Beispiel</th><th>Aktion</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for pf in proofs %}
+            <tr>
+                <td>
+                    <input type="text" name="auditFrage" form="proofFormList{{ pf.id }}" value="{{ pf.auditFrage or '' }}">
+                </td>
+                <td>
+                    <input type="text" name="normKapitel" form="proofFormList{{ pf.id }}" value="{{ pf.normKapitel or '' }}" style="width: 90px;">
+                </td>
+                <td>
+                    <input type="number" name="punkte" form="proofFormList{{ pf.id }}"
+                           value="{{ pf.punkte if pf.punkte is not none else '' }}" style="width: 70px;">
+                </td>
+                <td>
+                    <input type="text" name="auditor" form="proofFormList{{ pf.id }}" value="{{ pf.auditor or '' }}">
+                </td>
+                <td>
+                    <textarea name="bewertung" form="proofFormList{{ pf.id }}" rows="2">{{ pf.bewertung or '' }}</textarea>
+                </td>
+                <td>
+                    <textarea name="beispiel" form="proofFormList{{ pf.id }}" rows="2">{{ pf.beispiel or '' }}</textarea>
+                </td>
+                <td>
+                    <button type="submit" form="proofFormList{{ pf.id }}" class="ekey-btn ekey-btn-small">Speichern</button>
+                    <button type="submit" form="proofDeleteFormList{{ pf.id }}" class="ekey-btn ekey-btn-small"
+                            onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <hr class="ekey-form-hr">
+    <h4 class="ekey-group-heading">Neuen Proof manuell hinzufuegen</h4>
+    <form method="post" action="{{ url_for('gui.audit_plan_proof_add', plan_id=pl.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="source" value="list">
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofFrageList{{ pl.id }}">Frage</label>
+                <input type="text" id="newProofFrageList{{ pl.id }}" name="auditFrage" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofNormList{{ pl.id }}">Norm-Kapitel</label>
+                <input type="text" id="newProofNormList{{ pl.id }}" name="normKapitel">
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofPunkteList{{ pl.id }}">Punkte</label>
+                <input type="number" id="newProofPunkteList{{ pl.id }}" name="punkte">
+            </div>
+            <div class="ekey-form-row">
+                <label for="newProofAuditorList{{ pl.id }}">Auditor</label>
+                <input type="text" id="newProofAuditorList{{ pl.id }}" name="auditor">
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofBewertungList{{ pl.id }}">Bewertung</label>
+                <textarea id="newProofBewertungList{{ pl.id }}" name="bewertung" rows="2"></textarea>
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="newProofBeispielList{{ pl.id }}">Beispiel</label>
+                <textarea id="newProofBeispielList{{ pl.id }}" name="beispiel" rows="2"></textarea>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Proof hinzufuegen</button>
+        </div>
+    </form>
+</div>
+</div>
+</div>
+{% endfor %}
 
 <div id="modalConfirmDeletePlan" class="ekey-modal-overlay">
 <div class="ekey-modal" style="max-width: 420px;">
@@ -158,6 +395,50 @@ function ekeyFachbereichChange(select) {
         verantwortlichField.value = leitung;
     }
 }
+
+// Zeigt im Prozess-Dropdown nur die Prozesse des gewaehlten Fachbereichs (kein Fachbereich
+// gewaehlt = alle Prozesse). Eine nicht mehr passende bisherige Auswahl wird zurueckgesetzt.
+function ekeyFilterProzessByFachbereich() {
+    var fbSelect = document.getElementById('fachbereich');
+    var prSelect = document.getElementById('auditProzess');
+    if (!fbSelect || !prSelect) return;
+    var fbValue = fbSelect.value;
+    var currentValue = prSelect.value;
+    var currentStillValid = false;
+
+    for (var i = 0; i < prSelect.options.length; i++) {
+        var opt = prSelect.options[i];
+        if (!opt.value) { continue; } // Platzhalter "-- auswaehlen --" bleibt immer sichtbar
+        var optFb = opt.getAttribute('data-fachbereich') || '';
+        var match = !fbValue || optFb === fbValue;
+        opt.hidden = !match;
+        opt.disabled = !match;
+        if (match && opt.value === currentValue) {
+            currentStillValid = true;
+        }
+    }
+    if (currentValue && !currentStillValid) {
+        prSelect.value = '';
+    }
+}
+
+// Wird ein Prozess gewaehlt, uebernimmt das Fachbereich-Dropdown automatisch dessen Fachbereich.
+function ekeySyncFachbereichFromProzess() {
+    var prSelect = document.getElementById('auditProzess');
+    var fbSelect = document.getElementById('fachbereich');
+    if (!prSelect || !fbSelect) return;
+    var option = prSelect.options[prSelect.selectedIndex];
+    var fbId = option ? option.getAttribute('data-fachbereich') : '';
+    if (fbId && fbSelect.value !== fbId) {
+        fbSelect.value = fbId;
+        ekeyFachbereichChange(fbSelect);
+    }
+    ekeyFilterProzessByFachbereich();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    ekeyFilterProzessByFachbereich();
+});
 
 function ekeyConfirmDeletePlan(deleteUrl) {
     var form = document.getElementById('formDeletePlan');
