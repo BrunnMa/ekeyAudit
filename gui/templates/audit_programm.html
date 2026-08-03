@@ -45,6 +45,14 @@
                 <label for="auditJahr">Audit-Jahr</label>
                 <input type="number" id="auditJahr" name="auditJahr" value="{{ edit_programm.auditJahr if edit_programm else 2026 }}">
             </div>
+            <div class="ekey-form-row">
+                <label for="aktiv">&nbsp;</label>
+                <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="checkbox" id="aktiv" name="aktiv" {% if edit_programm and edit_programm.aktiv %}checked{% endif %}>
+                    Aktiv
+                </label>
+                <span class="ekey-hint">Nur aktive Auditprogramme koennen unter "Audit planen" ausgewaehlt werden. Standard fuer neue Programme: inaktiv.</span>
+            </div>
         </div>
 
         <!-- Zeile 2+: Auditor(en) -->
@@ -139,19 +147,68 @@
             {% else %}
             <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuesAuditprogramm')">Abbrechen</button>
             {% endif %}
+            {% if edit_programm %}
+                {% set ns_del = namespace(loeschbar=False) %}
+                {% for s in audit_status %}
+                    {% if edit_programm.auditStatus|string == s.id|string and s.auditStatus in ('Erfasst', 'Geplant') %}
+                        {% set ns_del.loeschbar = True %}
+                    {% endif %}
+                {% endfor %}
+                {% if ns_del.loeschbar %}
+                <button type="button" class="ekey-btn"
+                        onclick="ekeyConfirmDeleteProgramm('{{ url_for('gui.audit_programm_delete', programm_id=edit_programm.id) }}')">Loeschen</button>
+                {% else %}
+                <button type="button" class="ekey-btn" disabled
+                        title="Loeschen ist nur im Status 'Erfasst' oder 'Geplant' moeglich.">Loeschen</button>
+                {% endif %}
+            {% endif %}
         </div>
     </form>
 </div>
 </div>
 </div>
 
+<div id="modalConfirmDeleteProgramm" class="ekey-modal-overlay">
+<div class="ekey-modal" style="max-width: 420px;">
+<div class="ekey-modal-header">
+    <h2>Wirklich loeschen?</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalConfirmDeleteProgramm')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <p class="ekey-muted">Das Auditprogramm sowie alle zugehoerigen Auditplan-Eintraege (inkl. zugeordneter
+        Checkliste, Proofs, Ergebnisse, Abweichungen und Massnahmen) werden unwiderruflich geloescht.</p>
+    <form method="post" id="formDeleteProgramm" action="">
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Ja, loeschen</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalConfirmDeleteProgramm')">Abbrechen</button>
+        </div>
+    </form>
+</div>
+</div>
+</div>
+
+<script>
+function ekeyConfirmDeleteProgramm(deleteUrl) {
+    var form = document.getElementById('formDeleteProgramm');
+    if (form) form.setAttribute('action', deleteUrl);
+    ekeyOpenModal('modalConfirmDeleteProgramm');
+}
+</script>
+
 <div class="ekey-panel">
     <h2 class="ekey-h2">Vorhandene Auditprogramme</h2>
+    {% set programm_status_farben = {
+        'Erfasst': '#000000',
+        'Geplant': 'var(--ekey-primary)',
+        'In Arbeit': 'var(--ekey-success)',
+        'Fertig': 'var(--ekey-primary)',
+        'Wirksam': '#888888'
+    } %}
     <table class="ekey-table">
         <thead>
         <tr>
-            <th>Jahr</th><th>Typ</th><th>Norm</th><th>Auditor</th><th>Unternehmen</th>
-            <th>Status</th><th>Start</th><th>Ende</th><th>Aktion</th>
+            <th>Jahr</th><th>Typ</th><th>Norm</th><th>Status</th><th>Auditor</th><th>Unternehmen</th>
+            <th>Start</th><th>Ende</th><th>Aktion</th>
         </tr>
         </thead>
         <tbody>
@@ -160,9 +217,19 @@
                 <td>{{ p.auditJahr }}</td>
                 <td>{{ p.auditTyp }}</td>
                 <td>{{ p.norm }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.audit_programm_status_update', programm_id=p.id) }}" class="ekey-inline-form">
+                        <select name="auditStatus" onchange="this.form.submit()"
+                                style="color: {{ programm_status_farben.get(p.statusName, '') }}; font-weight: bold;">
+                            {% for s in audit_status %}
+                            <option value="{{ s.id }}" style="color: {{ programm_status_farben.get(s.auditStatus, '') }};"
+                                    {% if p.auditStatus|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </td>
                 <td>{{ p.auditor }}</td>
                 <td>{{ p.unternehmen }}</td>
-                <td>{{ p.statusName }}</td>
                 <td>{{ p.startDatum }}</td>
                 <td>{{ p.endDatum }}</td>
                 <td>

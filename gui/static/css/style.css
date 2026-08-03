@@ -266,8 +266,66 @@ input:focus, select:focus, textarea:focus {
 .ekey-inline-form input, .ekey-inline-form select { width: auto; min-width: 120px; }
 .ekey-checkbox-label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
 .ekey-checkbox-label input[type="checkbox"] { width: auto; }
+
+/* Aktiv/Inaktiv-Checkbox (z.B. Auditprogramm-Liste): gruen wenn aktiviert, grau wenn nicht. */
+.ekey-checkbox-aktiv {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #999999;
+}
+.ekey-checkbox-aktiv:checked {
+  accent-color: var(--ekey-success);
+}
 .ekey-auditor-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
 .ekey-auditor-row input { flex: 1; }
+
+/* ---------------- Richtext-Eingabe (z.B. Proof-Felder "Frage"/"Info") ---------------- */
+.ekey-richtext-toolbar { display: flex; gap: 2px; margin-bottom: 2px; }
+.ekey-rt-btn {
+  min-width: 26px;
+  min-height: 22px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: Verdana, Geneva, sans-serif;
+  background: var(--ekey-btn-bg);
+  color: var(--ekey-btn-text);
+  border: 1px solid var(--ekey-border);
+  cursor: pointer;
+}
+.ekey-rt-btn:hover { background: var(--ekey-primary); color: #FFFFFF; }
+.ekey-inline-number { width: 44px; text-align: center; padding: 4px 2px; }
+.ekey-th-reihenfolge { width: 1%; white-space: normal; text-align: center; line-height: 1.2; }
+.ekey-td-reihenfolge { width: 1%; text-align: center; padding-left: 4px; padding-right: 4px; }
+.ekey-actions-row { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; white-space: nowrap; }
+.ekey-rt-color {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--ekey-border);
+  cursor: pointer;
+  background: none;
+  vertical-align: middle;
+}
+.ekey-richtext-editor {
+  width: 100%;
+  min-height: 60px;
+  font-family: Verdana, Geneva, sans-serif;
+  font-size: 11px;
+  padding: 5px 6px;
+  border: 1px solid var(--ekey-border);
+  background: #FFFFFF;
+  color: var(--ekey-text);
+  overflow: auto;
+  resize: both;
+}
+.ekey-richtext-editor:focus {
+  outline: none;
+  border-color: var(--ekey-primary);
+  box-shadow: 0 0 0 1px var(--ekey-primary);
+}
+.ekey-richtext-editor ul, .ekey-richtext-editor ol { margin: 0 0 0 18px; padding: 0; }
+.ekey-richtext-display ul, .ekey-richtext-display ol { margin: 0 0 0 18px; padding: 0; }
 
 /* ---------------- Explizites Zeilenlayout (z.B. Auditprogramm-Formular) ---------------- */
 .ekey-form-flexrow { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }

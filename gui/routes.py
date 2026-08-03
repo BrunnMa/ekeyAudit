@@ -91,6 +91,7 @@ def audit_programm():
             "beauftragt": request.form.get("beauftragt"),
             "beauftragtAm": request.form.get("beauftragtAm"),
             "beauftragtInfo": request.form.get("beauftragtInfo"),
+            "aktiv": 1 if request.form.get("aktiv") else 0,
         }
         programm_id = request.form.get("programm_id")
         if programm_id:
@@ -138,6 +139,46 @@ def audit_programm_ziel_delete(ziel_id):
     return redirect(url_for("gui.audit_programm", ziele=programm_id))
 
 
+@gui.route("/audit-programm/<int:programm_id>/toggle-aktiv", methods=["POST"])
+@security.login_required
+def audit_programm_toggle_aktiv(programm_id):
+    aktiv = 1 if request.form.get("aktiv") else 0
+    db.set_audit_programm_aktiv(programm_id, aktiv)
+    flash("Auditprogramm ist jetzt {}.".format("aktiv" if aktiv else "inaktiv"), "success")
+    return redirect(url_for("gui.audit_programm"))
+
+
+@gui.route("/audit-programm/<int:programm_id>/status", methods=["POST"])
+@security.login_required
+def audit_programm_status_update(programm_id):
+    status_id = request.form.get("auditStatus")
+    if status_id:
+        db.update_audit_programm_status(programm_id, status_id)
+        flash("Status aktualisiert.", "success")
+    return redirect(url_for("gui.audit_programm"))
+
+
+@gui.route("/audit-programm/<int:programm_id>/delete", methods=["POST"])
+@security.login_required
+def audit_programm_delete(programm_id):
+    programm = db.get_audit_programm(programm_id)
+    if not programm:
+        abort(404)
+    status_row = db.query(
+        "SELECT auditStatus FROM Look_QM_AuditStatus WHERE id = ?", (programm.get("auditStatus"),), fetchone=True
+    )
+    status_name = status_row["auditStatus"] if status_row else None
+    if status_name not in ("Erfasst", "Geplant"):
+        flash(
+            "Auditprogramm kann nur im Status 'Erfasst' oder 'Geplant' geloescht werden "
+            f"(aktueller Status: {status_name or 'unbekannt'}).", "error"
+        )
+        return redirect(url_for("gui.audit_programm", edit=programm_id))
+    db.delete_audit_programm(programm_id)
+    flash("Auditprogramm samt allen Auditplaenen, Checklisten-Zuordnungen und Proofs vollstaendig geloescht.", "success")
+    return redirect(url_for("gui.audit_programm"))
+
+
 # --------------------------------------------------------------------------
 # Audit planen
 # --------------------------------------------------------------------------
@@ -148,6 +189,7 @@ def audit_plan():
     warnung = None
     if request.method == "POST":
         plan_id = request.form.get("plan_id")
+        ist_neuer_plan = not plan_id
         data = {
             "auditProgrammId": request.form.get("auditProgrammId"),
             "fachbereich": request.form.get("fachbereich"),
@@ -208,48 +250,78 @@ def audit_plan():
         else:
             flash(erfolg_text, "success")
 
-        if checkliste_uebernommen:
-            # Direkt im Bearbeiten-Modus weiter zu den uebernommenen Proofs, damit sie
-            # gleich angereichert (Punkte/Auditor/Bewertung/Beispiel) werden koennen.
+        if checkliste_uebernommen and not ist_neuer_plan:
+            # Nur beim Bearbeiten eines bestehenden Eintrags direkt weiter zum "Checkliste"-
+            # Pop-up (in dem die uebernommenen Proofs angezeigt werden koennen). Beim Anlegen
+            # eines NEUEN Auditplan-Eintrags soll dieses Pop-up sich nicht automatisch oeffnen.
             return redirect(url_for(
-                "gui.audit_plan", edit=aktueller_plan_id, programmFilter=data["auditProgrammId"]
+                "gui.audit_plan", programmFilter=data["auditProgrammId"], checklistePlan=aktueller_plan_id
             ))
         return redirect(url_for("gui.audit_plan", programmFilter=data["auditProgrammId"]))
 
     programm_filter = request.args.get("programmFilter") or None
     plaene = db.list_audit_plaene(programm_filter) if programm_filter else []
 
+    # Liste "vorhandene Auditplaene": das Auditprogramm-Auswahlfeld zeigt nur Programme, die
+    # nicht (mehr) im Status "Erfasst" sind, optional zusaetzlich per Status-Filter eingeschraenkt.
+    status_filter_programm = request.args.get("statusFilterProgramm") or None
+    programme_filter_optionen = db.list_audit_programme_planbar(status_filter_programm)
+    programm_status_optionen = [
+        s for s in db.get_lookup("Look_QM_AuditStatus") if s["auditStatus"] != "Erfasst"
+    ]
+
     edit_id = request.args.get("edit")
     edit_plan = db.get_audit_plan(edit_id) if edit_id else None
-    edit_plan_proofs = db.list_proofs_for_plan(edit_id) if edit_id else []
     assigned_checkliste_id = edit_plan.get("checklisteId") if edit_plan else None
     assigned_checkliste_name = _checkliste_name(assigned_checkliste_id)
+
+    # Fuer die Auswahl im Pop-up "Neuer/Bearbeiten Auditplan-Eintrag" duerfen nur aktive
+    # Auditprogramme gewaehlt werden. Ist ein bestehender Eintrag einem Programm zugeordnet,
+    # das inzwischen inaktiv gesetzt wurde, wird dieses zusaetzlich (als "(inaktiv)" markiert)
+    # mit aufgenommen - sonst wuerde die aktuelle Zuordnung beim Speichern unbeabsichtigt
+    # verloren gehen, weil sie im Dropdown gar nicht mehr auftaucht.
+    programme_auswahl = db.list_active_audit_programme()
+    if edit_plan and edit_plan.get("auditProgrammId") not in [p["id"] for p in programme_auswahl]:
+        zugeordnetes_programm = db.get_audit_programm(edit_plan["auditProgrammId"])
+        if zugeordnetes_programm:
+            programme_auswahl = programme_auswahl + [zugeordnetes_programm]
 
     # Fuer den direkten [Checkliste]-Button in der Liste: Proofs + Checklisten-Name
     # je Audit-Plan-Eintrag vorab laden (kein zusaetzlicher Klick ueber "Bearbeiten" noetig).
     checkliste_plan_open_id = request.args.get("checklistePlan")
+    proof_edit_id = request.args.get("proofEdit")
+    edit_proof = db.get_proof(proof_edit_id) if proof_edit_id else None
     proofs_by_plan = {}
     checkliste_name_by_plan = {}
+    next_reihenfolge_by_plan = {}
     for pl in plaene:
-        proofs_by_plan[pl["id"]] = db.list_proofs_for_plan(pl["id"])
+        proofs = db.list_proofs_for_plan(pl["id"])
+        proofs_by_plan[pl["id"]] = proofs
         checkliste_name_by_plan[pl["id"]] = _checkliste_name(pl.get("checklisteId"))
+        next_reihenfolge_by_plan[pl["id"]] = (
+            max((p["reihenfolge"] or 0) for p in proofs) + 1 if proofs else 1
+        )
 
     return render_template(
         "audit_plan.html",
         plaene=plaene,
         programm_filter=programm_filter,
-        programme=db.list_audit_programme(),
+        programme_filter_optionen=programme_filter_optionen,
+        programm_status_optionen=programm_status_optionen,
+        status_filter_programm=status_filter_programm,
+        programme_auswahl=programme_auswahl,
         prozesse=db.get_lookup("Look_QM_AuditProzess"),
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),
-        audit_status=db.get_lookup("Look_QM_AuditStatus"),
+        audit_status=db.get_lookup("Look_QM_AuditPlanStatus"),
         checklisten=db.list_checklisten(),
         edit_plan=edit_plan,
-        edit_plan_proofs=edit_plan_proofs,
         assigned_checkliste_id=assigned_checkliste_id,
         assigned_checkliste_name=assigned_checkliste_name,
         proofs_by_plan=proofs_by_plan,
         checkliste_name_by_plan=checkliste_name_by_plan,
         checkliste_plan_open_id=checkliste_plan_open_id,
+        edit_proof=edit_proof,
+        next_reihenfolge_by_plan=next_reihenfolge_by_plan,
     )
 
 
@@ -275,40 +347,58 @@ def audit_plan_delete(plan_id):
     return redirect(url_for("gui.audit_plan"))
 
 
+@gui.route("/audit-plan/<int:plan_id>/status", methods=["POST"])
+@security.login_required
+def audit_plan_status_update(plan_id):
+    status_id = request.form.get("auditStatus")
+    if status_id:
+        db.update_audit_plan_status(plan_id, status_id)
+        flash("Status aktualisiert.", "success")
+    programm_filter = request.form.get("programmFilter") or None
+    return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
+
 @gui.route("/audit-plan/proof/<int:proof_id>/update", methods=["POST"])
 @security.login_required
 def audit_plan_proof_update(proof_id):
     proof = db.get_proof(proof_id)
     if not proof:
         abort(404)
-    punkte_raw = request.form.get("punkte")
+    reihenfolge_raw = request.form.get("reihenfolge")
     try:
-        punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
+        reihenfolge = int(reihenfolge_raw) if reihenfolge_raw not in (None, "") else (proof["reihenfolge"] or 0)
     except ValueError:
-        punkte = None
-    data = {
-        "auditFrage": request.form.get("auditFrage"),
-        "normKapitel": request.form.get("normKapitel"),
-        "punkte": punkte,
-        "auditor": request.form.get("auditor") or None,
-        "bewertung": request.form.get("bewertung") or None,
-        "beispiel": request.form.get("beispiel") or None,
-    }
-    db.update_proof(proof_id, data)
+        reihenfolge = proof["reihenfolge"] or 0
+    db.update_plan_proof(
+        proof_id,
+        request.form.get("auditFrage"),
+        request.form.get("normKapitel"),
+        request.form.get("auditResultInfo", ""),
+        reihenfolge,
+    )
     flash("Proof gespeichert.", "success")
     programm_filter = request.form.get("programmFilter") or None
     plan_id = proof["auditPlanId"]
 
-    # Je nachdem, ob die Aenderung ueber das "Bearbeiten"-Pop-up oder direkt ueber den
-    # [Checkliste]-Button in der Liste erfolgt ist, wird danach das passende Pop-up
-    # wieder geoeffnet (statt immer den Bearbeiten-Dialog aufzureissen).
-    source = request.form.get("source")
-    if source == "list":
-        return redirect(url_for(
-            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
-        ))
+    # Proofs werden ausschliesslich im "Checkliste"-Pop-up angezeigt/bearbeitet (nicht mehr
+    # im "Bearbeiten"-Pop-up) - danach also immer wieder dorthin zurueckkehren.
     return redirect(url_for(
-        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+        "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
+    ))
+
+
+@gui.route("/audit-plan/proof/<int:proof_id>/reihenfolge", methods=["POST"])
+@security.login_required
+def audit_plan_proof_reihenfolge(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    db.update_plan_proof_reihenfolge(proof_id, request.form.get("reihenfolge") or 0)
+    flash("Reihenfolge aktualisiert.", "success")
+    programm_filter = request.form.get("programmFilter") or None
+    plan_id = proof["auditPlanId"]
+    return redirect(url_for(
+        "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
     ))
 
 
@@ -317,18 +407,11 @@ def audit_plan_proof_update(proof_id):
 def audit_plan_proof_add(plan_id):
     if not db.get_audit_plan(plan_id):
         abort(404)
-    punkte_raw = request.form.get("punkte")
-    try:
-        punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
-    except ValueError:
-        punkte = None
     data = {
         "auditFrage": request.form.get("auditFrage", "").strip(),
         "normKapitel": request.form.get("normKapitel"),
-        "punkte": punkte,
-        "auditor": request.form.get("auditor") or None,
-        "bewertung": request.form.get("bewertung") or None,
-        "beispiel": request.form.get("beispiel") or None,
+        "auditResultInfo": request.form.get("auditResultInfo", ""),
+        "reihenfolge": request.form.get("reihenfolge"),
     }
     if not data["auditFrage"]:
         flash("Bitte eine Frage/einen Pruefpunkt-Text angeben.", "error")
@@ -337,13 +420,8 @@ def audit_plan_proof_add(plan_id):
         flash("Proof manuell hinzugefuegt.", "success")
 
     programm_filter = request.form.get("programmFilter") or None
-    source = request.form.get("source")
-    if source == "list":
-        return redirect(url_for(
-            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
-        ))
     return redirect(url_for(
-        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+        "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
     ))
 
 
@@ -358,13 +436,8 @@ def audit_plan_proof_delete(proof_id):
     flash("Proof geloescht.", "success")
 
     programm_filter = request.form.get("programmFilter") or None
-    source = request.form.get("source")
-    if source == "list":
-        return redirect(url_for(
-            "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
-        ))
     return redirect(url_for(
-        "gui.audit_plan", edit=plan_id, programmFilter=programm_filter
+        "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
     ))
 
 
@@ -375,28 +448,24 @@ def audit_plan_proof_delete(proof_id):
 @gui.route("/audit-durchfuehren")
 @security.login_required
 def audit_durchfuehren():
-    plaene = db.list_audit_plaene()
-    laufende = [p for p in plaene if p.get("auditStatus") in (2, 3)]
-    return render_template("audit_durchfuehren.html", plaene=laufende, alle_plaene=plaene,
-                            checklisten=db.list_checklisten())
-
-
-@gui.route("/audit-durchfuehren/<int:plan_id>/start", methods=["POST"])
-@security.login_required
-def audit_durchfuehren_start(plan_id):
-    checkliste_id = request.form.get("checkliste_id")
-    if not checkliste_id:
-        flash("Bitte eine Checkliste auswaehlen.", "error")
-        return redirect(url_for("gui.audit_durchfuehren"))
-    anzahl_kopiert = db.copy_checkliste_to_proofs(plan_id, checkliste_id)
-    db.update_audit_plan_status(plan_id, 3)  # In Arbeit
-    if anzahl_kopiert is not None and anzahl_kopiert > 0:
-        flash(f"Checkliste wurde als {anzahl_kopiert} Proof(s) uebernommen. Audit ist jetzt 'In Arbeit'.", "success")
-    elif anzahl_kopiert == 0:
-        flash("Checkliste wurde zugeordnet, enthaelt aktuell aber keine Proofs. Audit ist jetzt 'In Arbeit'.", "warning")
-    else:
-        flash("Fuer diesen Plan ist bereits eine Checkliste zugeordnet.", "warning")
-    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=plan_id))
+    # Checklisten-Zuordnung passiert bereits unter "Audit planen" - diese Seite dient nur
+    # noch dazu, ein aktives Auditprogramm auszuwaehlen und dessen Auditplan-Eintraege zur
+    # Durchfuehrung (Ergebnisse/Interviews/etc. erfassen) zu oeffnen. Eintraege mit Status
+    # "Entwurf" sind noch nicht bearbeitbar.
+    programme_aktiv = db.list_active_audit_programme()
+    programm_id = request.args.get("programmId") or None
+    plaene = db.list_audit_plaene(programm_id) if programm_id else []
+    entwurf_row = db.query(
+        "SELECT id FROM Look_QM_AuditPlanStatus WHERE planStatus = ?", ("Entwurf",), fetchone=True
+    )
+    entwurf_status_id = entwurf_row["id"] if entwurf_row else None
+    return render_template(
+        "audit_durchfuehren.html",
+        programme_aktiv=programme_aktiv,
+        programm_id=programm_id,
+        plaene=plaene,
+        entwurf_status_id=entwurf_status_id,
+    )
 
 
 @gui.route("/audit-durchfuehren/<int:plan_id>")
@@ -405,100 +474,145 @@ def audit_durchfuehren_detail(plan_id):
     plan = db.get_audit_plan(plan_id)
     if not plan:
         abort(404)
+    entwurf_row = db.query(
+        "SELECT id FROM Look_QM_AuditPlanStatus WHERE planStatus = ?", ("Entwurf",), fetchone=True
+    )
+    if entwurf_row and str(plan.get("auditStatus")) == str(entwurf_row["id"]):
+        flash("Dieser Auditplan-Eintrag hat den Status 'Entwurf' und ist noch nicht bearbeitbar.", "warning")
+        return redirect(url_for("gui.audit_durchfuehren", programmId=plan.get("auditProgrammId")))
     proofs = db.list_proofs_for_plan(plan_id)
-    bewertungen = db.get_lookup("Look_QM_AuditBewertung")
+
+    # Fuer den [Bearbeiten]-Button je Proof: Ergebnisse/Links/Anhaenge/Interviews werden fuer
+    # alle Proofs dieses Plans vorab geladen, damit das PopUp "Proof bearbeiten" direkt auf
+    # dieser Seite angezeigt werden kann (keine eigene Seite mehr noetig).
+    results_by_proof = {}
+    links_by_proof = {}
+    anhaenge_by_proof = {}
+    interviews_by_proof = {}
+    abweichungen_by_result = {}
+    for pf in proofs:
+        results = db.list_results_for_proof(pf["id"])
+        results_by_proof[pf["id"]] = results
+        links_by_proof[pf["id"]] = db.list_links(pf["id"])
+        anhaenge_by_proof[pf["id"]] = db.list_anhaenge(pf["id"])
+        interviews_by_proof[pf["id"]] = db.query(
+            "SELECT * FROM STG_QM_AuditInterview WHERE auditProofsId = ? ORDER BY id DESC", (pf["id"],)
+        )
+        for r in results:
+            abweichungen_by_result[r["id"]] = db.query(
+                "SELECT * FROM STG_QM_AuditAbweichung WHERE auditResultID = ? ORDER BY id DESC", (r["id"],)
+            )
+
+    proof_open_id = request.args.get("proofOpen")
     return render_template(
         "audit_durchfuehren.html",
         plan=plan,
         proofs=proofs,
-        bewertungen=bewertungen,
+        bewertungen=db.get_lookup("Look_QM_AuditBewertung"),
+        mitarbeiter=db.list_mitarbeiter(),
+        results_by_proof=results_by_proof,
+        links_by_proof=links_by_proof,
+        anhaenge_by_proof=anhaenge_by_proof,
+        interviews_by_proof=interviews_by_proof,
+        abweichungen_by_result=abweichungen_by_result,
+        proof_open_id=proof_open_id,
+        heute=datetime.now().strftime("%Y-%m-%d"),
         detail_mode=True,
-        plaene=[], alle_plaene=db.list_audit_plaene(), checklisten=db.list_checklisten(),
     )
 
 
-@gui.route("/audit-durchfuehren/proof/<int:proof_id>", methods=["GET", "POST"])
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/result/add", methods=["POST"])
 @security.login_required
-def audit_proof_detail(proof_id):
+def audit_result_add(proof_id):
     proof = db.get_proof(proof_id)
     if not proof:
         abort(404)
-    plan_id = proof["auditPlanId"]
+    auditoren = [a.strip() for a in request.form.getlist("auditor_liste") if a.strip()]
+    punkte_raw = request.form.get("punkte")
+    try:
+        punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
+    except ValueError:
+        punkte = None
+    datum = request.form.get("datumerfasst") or datetime.now().strftime("%Y-%m-%d")
+    info = request.form.get("auditResultInfo", "")
+    db.add_audit_result(proof_id, "; ".join(auditoren), datum, info, punkte)
+    flash("Ergebnis erfasst.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
-    if request.method == "POST":
-        form_type = request.form.get("form_type")
 
-        if form_type == "result":
-            bewertung_id = int(request.form.get("auditBewertungID"))
-            antwort = request.form.get("antwort", "")
-            name_auditor = request.form.get("nameAuditor", "")
-            info = request.form.get("auditResultInfo", "")
-            datum = request.form.get("datumerfasst") or datetime.now().strftime("%Y-%m-%d")
-            result_id = db.add_audit_result(proof_id, name_auditor, bewertung_id, datum, antwort, info)
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/link/add", methods=["POST"])
+@security.login_required
+def audit_proof_link_add(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    link = request.form.get("link", "").strip()
+    if link:
+        db.add_link(proof_id, proof.get("auditChecklisteID"), link)
+        flash("Link hinzugefuegt.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
-            if bewertung_id in (2, 3):  # Empfehlung oder Abweichung
-                abweichung_text = request.form.get("abweichung", "")
-                eigner = request.form.get("nameEigner", "")
-                if abweichung_text and eigner:
-                    ab_id = db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner)
-                    massnahme_text = request.form.get("massnahme", "")
-                    datum_massnahme = request.form.get("datumMassnahme") or datum
-                    massnahme_eigner = request.form.get("massnahmeEigner", eigner)
-                    if massnahme_text:
-                        db.add_massnahme(ab_id, massnahme_text, datum_massnahme, massnahme_eigner)
-                    flash("Ergebnis, Abweichung und Massnahme wurden erfasst.", "success")
-                else:
-                    flash("Ergebnis erfasst. Achtung: Bei Empfehlung/Abweichung sollten Abweichungstext "
-                          "und Eigner ausgefuellt werden.", "warning")
-            else:
-                flash("Ergebnis erfasst.", "success")
 
-        elif form_type == "link":
-            link = request.form.get("link", "").strip()
-            if link:
-                db.add_link(proof_id, proof.get("auditChecklisteID"), link)
-                flash("Link hinzugefuegt.", "success")
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/anhang/add", methods=["POST"])
+@security.login_required
+def audit_proof_anhang_add(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    anhang = request.form.get("anhang", "").strip()
+    if anhang:
+        db.add_anhang(proof_id, proof.get("auditChecklisteID"), anhang)
+        flash("Anhang-Referenz hinzugefuegt.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
-        elif form_type == "anhang":
-            anhang = request.form.get("anhang", "").strip()
-            if anhang:
-                db.add_anhang(proof_id, proof.get("auditChecklisteID"), anhang)
-                flash("Anhang-Referenz hinzugefuegt.", "success")
 
-        elif form_type == "interview":
-            name_auditor = request.form.get("nameAuditor", "")
-            inhalt = request.form.get("inhalt", "")
-            if inhalt:
-                db.add_interview(proof_id, name_auditor, inhalt)
-                flash("Interview erfasst.", "success")
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/interview/add", methods=["POST"])
+@security.login_required
+def audit_proof_interview_add(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    name_auditor = request.form.get("nameAuditor", "")
+    inhalt = request.form.get("inhalt", "")
+    if inhalt:
+        db.add_interview(proof_id, name_auditor, inhalt)
+        flash("Interview erfasst.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
-        return redirect(url_for("gui.audit_proof_detail", proof_id=proof_id))
 
-    results = db.list_results_for_proof(proof_id)
-    links = db.list_links(proof_id)
-    anhaenge = db.list_anhaenge(proof_id)
-    interviews = db.query(
-        "SELECT * FROM STG_QM_AuditInterview WHERE auditProofsId = ? ORDER BY id DESC", (proof_id,)
-    )
-    abweichungen = db.query("""
-        SELECT a.* FROM STG_QM_AuditAbweichung a
-        JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
-        WHERE r.auditProofsId = ? ORDER BY a.id DESC
-    """, (proof_id,))
+@gui.route("/audit-durchfuehren/result/<int:result_id>/abweichung/add", methods=["POST"])
+@security.login_required
+def audit_result_abweichung_add(result_id):
+    result = db.get_result(result_id)
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
 
-    return render_template(
-        "audit_durchfuehren.html",
-        proof_mode=True,
-        proof=proof,
-        plan=db.get_audit_plan(plan_id),
-        results=results,
-        links=links,
-        anhaenge=anhaenge,
-        interviews=interviews,
-        abweichungen=abweichungen,
-        bewertungen=db.get_lookup("Look_QM_AuditBewertung"),
-        plaene=[], alle_plaene=db.list_audit_plaene(), checklisten=db.list_checklisten(),
-    )
+    bewertung_id = request.form.get("auditBewertungID")
+    abweichung_text = request.form.get("abweichung", "").strip()
+    eigner = request.form.get("nameEigner", "").strip()
+    datum = request.form.get("datumErfasst") or datetime.now().strftime("%Y-%m-%d")
+
+    if bewertung_id:
+        db.update_result_bewertung(result_id, bewertung_id)
+
+    if abweichung_text and eigner:
+        name_auditor = result.get("nameAuditor") or ""
+        ab_id = db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner)
+        massnahme_text = request.form.get("massnahme", "").strip()
+        if massnahme_text:
+            datum_massnahme = request.form.get("datumMassnahme") or datum
+            massnahme_eigner = request.form.get("massnahmeEigner") or eigner
+            db.add_massnahme(ab_id, massnahme_text, datum_massnahme, massnahme_eigner)
+        flash("Abweichung erfasst.", "success")
+    else:
+        flash("Bitte Abweichungstext und Eigner angeben.", "error")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof["id"]
+    ))
 
 
 @gui.route("/audit-durchfuehren/interviews")
@@ -610,6 +724,40 @@ def governance_fachbereiche():
 @security.login_required
 def governance_checklisten():
     if request.method == "POST":
+        form_type = request.form.get("form_type")
+
+        if form_type == "proof":
+            # Proofs (Pruefpunkte) der aktuell gewaehlten Checkliste - diese Seite vereint
+            # Checklisten- und Proof-Verwaltung, "Proofs anlegen" ist keine eigene Seite mehr.
+            checkliste_id_proof = request.form.get("checkliste_id")
+            action = request.form.get("action")
+            if action == "add":
+                db.add_checkliste_proof(
+                    checkliste_id_proof,
+                    request.form.get("auditFrage"),
+                    request.form.get("normKapitel"),
+                    request.form.get("auditResultInfo", ""),
+                )
+                flash("Proof (Pruefpunkt) hinzugefuegt.", "success")
+            elif action == "edit":
+                db.update_checkliste_proof(
+                    request.form.get("proof_id"),
+                    request.form.get("auditFrage"),
+                    request.form.get("normKapitel"),
+                    request.form.get("auditResultInfo", ""),
+                )
+                flash("Proof aktualisiert.", "success")
+            elif action == "delete":
+                db.delete_checkliste_proof(request.form.get("proof_id"))
+                flash("Proof geloescht.", "success")
+            elif action == "reihenfolge":
+                db.update_checkliste_proof_reihenfolge(
+                    request.form.get("proof_id"),
+                    request.form.get("reihenfolge") or 0,
+                )
+                flash("Reihenfolge aktualisiert.", "success")
+            return redirect(url_for("gui.governance_checklisten", checkliste=checkliste_id_proof))
+
         fields = {
             "prozessId": request.form.get("prozessId") or None,
             "bezeichnung": request.form.get("bezeichnung"),
@@ -626,11 +774,17 @@ def governance_checklisten():
         return redirect(url_for("gui.governance_checklisten"))
 
     edit_id = request.args.get("edit")
+    checkliste_selected_id = request.args.get("checkliste") or None
+    proof_edit_id = request.args.get("proof_edit")
     return render_template(
         "governance_checklisten.html",
         checklisten=db.list_checklisten(),
         prozesse=db.get_lookup("Look_QM_AuditProzess"),
         edit_checkliste=db.get_checkliste(edit_id) if edit_id else None,
+        checkliste_selected_id=checkliste_selected_id,
+        checkliste_selected=db.get_checkliste(checkliste_selected_id) if checkliste_selected_id else None,
+        proofs=db.list_checkliste_proofs(checkliste_selected_id) if checkliste_selected_id else [],
+        edit_proof=db.get_checkliste_proof(proof_edit_id) if proof_edit_id else None,
     )
 
 
@@ -638,45 +792,11 @@ def governance_checklisten():
 @security.login_required
 def governance_checkliste_delete(checkliste_id):
     db.delete_checkliste(checkliste_id)
-    flash("Checkliste geloescht.", "success")
-    return redirect(url_for("gui.governance_checklisten"))
-
-
-@gui.route("/governance/proofs", methods=["GET", "POST"])
-@security.login_required
-def governance_proofs():
-    checkliste_id = request.args.get("checkliste_id") or request.form.get("checkliste_id")
-
-    if request.method == "POST":
-        action = request.form.get("action")
-        if action == "add":
-            db.add_checkliste_proof(
-                checkliste_id,
-                request.form.get("auditFrage"),
-                request.form.get("normKapitel"),
-                request.form.get("auditResultInfo", ""),
-            )
-            flash("Proof (Pruepunkt) hinzugefuegt.", "success")
-        elif action == "edit":
-            db.update_checkliste_proof(
-                request.form.get("proof_id"),
-                request.form.get("auditFrage"),
-                request.form.get("normKapitel"),
-                request.form.get("auditResultInfo", ""),
-            )
-            flash("Proof aktualisiert.", "success")
-        elif action == "delete":
-            db.delete_checkliste_proof(request.form.get("proof_id"))
-            flash("Proof geloescht.", "success")
-        return redirect(url_for("gui.governance_proofs", checkliste_id=checkliste_id))
-
-    proofs = db.list_checkliste_proofs(checkliste_id) if checkliste_id else []
-    return render_template(
-        "governance_proofs.html",
-        checklisten=db.list_checklisten(),
-        checkliste_id=checkliste_id,
-        proofs=proofs,
+    flash(
+        "Checkliste samt ihrer Proofs geloescht. Bereits zugeordnete Auditplaene bleiben "
+        "erhalten, sind aber nicht mehr mit dieser Vorlage verknuepft.", "success"
     )
+    return redirect(url_for("gui.governance_checklisten"))
 
 
 # --------------------------------------------------------------------------
@@ -764,6 +884,7 @@ def massnahme_status_add(massnahme_id):
 CONFIG_TABLES = {
     "audittyp": ("Look_QM_AuditTyp", ["auditTyp", "info"]),
     "auditstatus": ("Look_QM_AuditStatus", ["auditStatus", "info"]),
+    "auditplanstatus": ("Look_QM_AuditPlanStatus", ["planStatus", "info"]),
     "auditbewertung": ("Look_QM_AuditBewertung", ["auditResult", "info"]),
     "mitarbeiter": ("Look_QM_Mitarbeiter", ["name", "username", "email", "abteilung"]),
 }

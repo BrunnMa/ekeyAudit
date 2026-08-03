@@ -1,0 +1,18 @@
+{% macro richtext_field(name, label, value='') %}
+<div class="ekey-form-row ekey-form-row-wide">
+    <label>{{ label }}</label>
+    <div class="ekey-richtext">
+        <div class="ekey-richtext-toolbar">
+            <button type="button" class="ekey-rt-btn" data-command="bold" title="Fett"><b>F</b></button>
+            <button type="button" class="ekey-rt-btn" data-command="italic" title="Kursiv"><i>K</i></button>
+            <button type="button" class="ekey-rt-btn" data-command="underline" title="Unterstrichen"><u>U</u></button>
+            <button type="button" class="ekey-rt-btn" data-command="insertUnorderedList" title="Aufzaehlung">&bull; Liste</button>
+            <button type="button" class="ekey-rt-btn" data-command="insertOrderedList" title="Nummerierung">1. Liste</button>
+            <input type="color" class="ekey-rt-color" title="Textfarbe" value="#333333">
+            <button type="button" class="ekey-rt-btn ekey-rt-color-reset" title="Standardfarbe">Std.</button>
+        </div>
+        <div class="ekey-richtext-editor" contenteditable="true">{{ value | safe }}</div>
+        <input type="hidden" name="{{ name }}" class="ekey-richtext-value" value="{{ value }}">
+    </div>
+</div>
+{% endmacro %}

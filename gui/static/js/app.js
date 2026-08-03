@@ -16,20 +16,20 @@ document.addEventListener("DOMContentLoaded", function () {
 // Auditor(en)-Liste auf der Seite "Audit programm": Zeilen hinzufuegen/entfernen
 // ---------------------------------------------------------------------
 
-function ekeyAddAuditorRow() {
-    var container = document.getElementById("auditorRows");
+function ekeyAddAuditorRow(containerId) {
+    var container = document.getElementById(containerId || "auditorRows");
     if (!container) return;
     var row = document.createElement("div");
     row.className = "ekey-auditor-row";
     row.innerHTML =
         '<input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off" ' +
         'placeholder="Namen eingeben zum Suchen...">' +
-        '<button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this)">Entfernen</button>';
+        '<button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this, \'' + (containerId || "auditorRows") + '\')">Entfernen</button>';
     container.appendChild(row);
 }
 
-function ekeyRemoveAuditorRow(btn) {
-    var container = document.getElementById("auditorRows");
+function ekeyRemoveAuditorRow(btn, containerId) {
+    var container = document.getElementById(containerId || "auditorRows");
     if (!container) return;
     if (container.children.length > 1) {
         btn.parentElement.remove();
@@ -95,6 +95,10 @@ document.addEventListener("keydown", function (e) {
     // In Textareas soll [Enter] weiterhin einen Zeilenumbruch einfuegen.
     if (target.tagName === "TEXTAREA") return;
 
+    // In Richtext-Editoren (contenteditable) soll [Enter] ebenfalls normal
+    // einen Zeilenumbruch einfuegen statt zum naechsten Feld zu springen.
+    if (target.isContentEditable) return;
+
     // Auf Buttons (z.B. "Speichern", "Schliessen") soll [Enter] wie ein Klick wirken -
     // das Schliessen/Absenden per Button ist ausdruecklich erlaubt.
     if (target.tagName === "BUTTON") return;
@@ -135,3 +139,99 @@ function ekeyToggle(id) {
         el.style.display = "none";
     }
 }
+
+// ---------------------------------------------------------------------
+// Einfache Richtext-Eingabe (Fett/Kursiv/Unterstrichen/Listen), z.B. fuer die
+// Proof-Felder "Frage" und "Info". Kein Framework: contenteditable-Div +
+// document.execCommand. Der aktuelle Inhalt (HTML) wird bei jeder Aenderung
+// sowie zusaetzlich beim Absenden des Formulars in ein verstecktes
+// Input-Feld uebertragen, damit er ganz normal mit dem Formular gespeichert
+// wird.
+// ---------------------------------------------------------------------
+
+function ekeyRichTextSync(editor) {
+    var wrapper = editor.closest(".ekey-richtext");
+    if (!wrapper) return;
+    var hidden = wrapper.querySelector("input.ekey-richtext-value");
+    if (hidden) hidden.value = editor.innerHTML;
+}
+
+// Merkt sich die aktuelle Textmarkierung im Editor, damit sie beim Klick auf
+// ein Toolbar-Element (Button oder Farbwaehler) - was den Fokus kurzzeitig
+// aus dem Editor herausnimmt - vor dem Ausfuehren des Formatbefehls wieder
+// hergestellt werden kann.
+function ekeyRichTextSaveSelection(editor) {
+    var sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+        var range = sel.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer)) {
+            editor._ekeySavedRange = range.cloneRange();
+        }
+    }
+}
+
+function ekeyRichTextRestoreSelection(editor) {
+    if (editor._ekeySavedRange) {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(editor._ekeySavedRange);
+    }
+}
+
+function ekeyRichTextApplyCommand(wrapper, command, value) {
+    var editor = wrapper.querySelector(".ekey-richtext-editor");
+    if (!editor) return;
+    editor.focus();
+    ekeyRichTextRestoreSelection(editor);
+    document.execCommand(command, false, value || null);
+    ekeyRichTextSaveSelection(editor);
+    ekeyRichTextSync(editor);
+}
+
+document.addEventListener("mousedown", function (e) {
+    // Verhindert, dass ein Klick auf einen Toolbar-Button die Textmarkierung
+    // im Editor verwirft, bevor der Formatbefehl ausgefuehrt wird.
+    if (e.target.closest(".ekey-rt-btn")) {
+        e.preventDefault();
+    }
+});
+
+document.addEventListener("click", function (e) {
+    var resetBtn = e.target.closest(".ekey-rt-color-reset");
+    if (resetBtn) {
+        e.preventDefault();
+        var resetWrapper = resetBtn.closest(".ekey-richtext");
+        if (resetWrapper) ekeyRichTextApplyCommand(resetWrapper, "foreColor", "#333333");
+        return;
+    }
+    var btn = e.target.closest(".ekey-rt-btn");
+    if (!btn) return;
+    e.preventDefault();
+    var wrapper = btn.closest(".ekey-richtext");
+    if (!wrapper) return;
+    ekeyRichTextApplyCommand(wrapper, btn.getAttribute("data-command"));
+});
+
+document.addEventListener("input", function (e) {
+    var colorInput = e.target.closest(".ekey-rt-color");
+    if (!colorInput) return;
+    var wrapper = colorInput.closest(".ekey-richtext");
+    if (!wrapper) return;
+    ekeyRichTextApplyCommand(wrapper, "foreColor", colorInput.value);
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".ekey-richtext-editor").forEach(function (editor) {
+        editor.addEventListener("input", function () { ekeyRichTextSync(editor); });
+        editor.addEventListener("blur", function () { ekeyRichTextSync(editor); });
+        editor.addEventListener("mouseup", function () { ekeyRichTextSaveSelection(editor); });
+        editor.addEventListener("keyup", function () { ekeyRichTextSaveSelection(editor); });
+    });
+    document.querySelectorAll("form").forEach(function (form) {
+        form.addEventListener("submit", function () {
+            form.querySelectorAll(".ekey-richtext-editor").forEach(function (editor) {
+                ekeyRichTextSync(editor);
+            });
+        });
+    });
+});

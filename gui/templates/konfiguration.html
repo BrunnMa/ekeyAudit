@@ -8,6 +8,7 @@
     <div class="ekey-tabs">
         <a href="{{ url_for('gui.konfiguration', tab='audittyp') }}" class="ekey-btn {% if active_tab=='audittyp' %}ekey-btn-active{% endif %}">Audit-Typ</a>
         <a href="{{ url_for('gui.konfiguration', tab='auditstatus') }}" class="ekey-btn {% if active_tab=='auditstatus' %}ekey-btn-active{% endif %}">Audit-Status</a>
+        <a href="{{ url_for('gui.konfiguration', tab='auditplanstatus') }}" class="ekey-btn {% if active_tab=='auditplanstatus' %}ekey-btn-active{% endif %}">Auditplan-Status</a>
         <a href="{{ url_for('gui.konfiguration', tab='auditbewertung') }}" class="ekey-btn {% if active_tab=='auditbewertung' %}ekey-btn-active{% endif %}">Audit-Bewertung</a>
         <a href="{{ url_for('gui.konfiguration', tab='mitarbeiter') }}" class="ekey-btn {% if active_tab=='mitarbeiter' %}ekey-btn-active{% endif %}">Mitarbeiter</a>
         <a href="{{ url_for('gui.konfiguration', tab='users') }}" class="ekey-btn {% if active_tab=='users' %}ekey-btn-active{% endif %}">Zugriff / Benutzer</a>
@@ -64,6 +65,38 @@
                 <td>
                     <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
                         <input type="hidden" name="table_key" value="auditstatus">
+                        <input type="hidden" name="row_id" value="{{ row.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if active_tab == 'auditplanstatus' %}
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Auditplan-Status anlegen</h2>
+    <p class="ekey-muted">Diese Werte stehen im Status-Feld eines Auditplan-Eintrags unter "Audit planen" zur Auswahl.</p>
+    <form method="post" action="{{ url_for('gui.konfiguration') }}" class="ekey-inline-form">
+        <input type="hidden" name="table_key" value="auditplanstatus">
+        <input type="text" name="planStatus" placeholder="Status" required>
+        <input type="text" name="info" placeholder="Info">
+        <button type="submit" class="ekey-btn ekey-btn-primary">Anlegen</button>
+    </form>
+    <table class="ekey-table">
+        <thead><tr><th>Status</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for row in data.auditplanstatus %}
+            <tr>
+                <td>{{ row.planStatus }}</td>
+                <td>{{ row.info }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.konfiguration') }}" style="display:inline">
+                        <input type="hidden" name="table_key" value="auditplanstatus">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
                         <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>

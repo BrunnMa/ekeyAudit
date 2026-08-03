@@ -153,6 +153,13 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS Look_QM_AuditPlanStatus (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planStatus TEXT NOT NULL,
+        info TEXT
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS Look_QM_AuditProzess (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         processName TEXT NOT NULL,
@@ -201,6 +208,7 @@ SCHEMA_STATEMENTS = [
         beauftragt TEXT,
         beauftragtAm TEXT,
         beauftragtInfo TEXT,
+        aktiv INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id)
     )
     """,
@@ -226,7 +234,7 @@ SCHEMA_STATEMENTS = [
         checklisteId INTEGER,
         FOREIGN KEY (auditProgrammId) REFERENCES STG_QM_AuditProgramm(id),
         FOREIGN KEY (auditProzess) REFERENCES Look_QM_AuditProzess(id),
-        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id),
+        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditPlanStatus(id),
         FOREIGN KEY (checklisteId) REFERENCES STG_QM_AuditCheckliste(id)
     )
     """,
@@ -245,6 +253,7 @@ SCHEMA_STATEMENTS = [
         auditor TEXT,
         bewertung TEXT,
         beispiel TEXT,
+        reihenfolge INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id)
     )
     """,
@@ -282,6 +291,7 @@ SCHEMA_STATEMENTS = [
         datumerfasst TEXT,
         antwort TEXT,
         auditResultInfo TEXT,
+        punkte INTEGER,
         FOREIGN KEY (auditProofsId) REFERENCES STG_QM_AuditProofs(id),
         FOREIGN KEY (auditBewertungID) REFERENCES Look_QM_AuditBewertung(id)
     )
@@ -356,6 +366,7 @@ SCHEMA_STATEMENTS = [
         linkId INTEGER,
         auditresultId INTEGER,
         auditResultInfo TEXT,
+        reihenfolge INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (auditChecklisteID) REFERENCES STG_QM_AuditCheckliste(id)
     )
     """,
@@ -405,6 +416,11 @@ SCHEMA_STATEMENTS_MSSQL = [
         auditResult NVARCHAR(255) NOT NULL,
         info NVARCHAR(MAX)
     """),
+    ("Look_QM_AuditPlanStatus", """
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        planStatus NVARCHAR(255) NOT NULL,
+        info NVARCHAR(MAX)
+    """),
     ("Look_QM_AuditProzess", """
         id INT IDENTITY(1,1) PRIMARY KEY,
         processName NVARCHAR(255) NOT NULL,
@@ -445,6 +461,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         beauftragt NVARCHAR(255),
         beauftragtAm NVARCHAR(20),
         beauftragtInfo NVARCHAR(MAX),
+        aktiv INT NOT NULL DEFAULT 0,
         FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id)
     """),
     ("STG_QM_AuditZiele", """
@@ -466,7 +483,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         checklisteId INT,
         FOREIGN KEY (auditProgrammId) REFERENCES STG_QM_AuditProgramm(id),
         FOREIGN KEY (auditProzess) REFERENCES Look_QM_AuditProzess(id),
-        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditStatus(id)
+        FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditPlanStatus(id)
     """),
     ("STG_QM_AuditProofs", """
         id INT IDENTITY(1,1) PRIMARY KEY,
@@ -482,6 +499,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         auditor NVARCHAR(255),
         bewertung NVARCHAR(MAX),
         beispiel NVARCHAR(MAX),
+        reihenfolge INT NOT NULL DEFAULT 0,
         FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id)
     """),
     ("STG_QM_AuditAnhang", """
@@ -511,6 +529,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         datumerfasst NVARCHAR(20),
         antwort NVARCHAR(MAX),
         auditResultInfo NVARCHAR(MAX),
+        punkte INT,
         FOREIGN KEY (auditProofsId) REFERENCES STG_QM_AuditProofs(id),
         FOREIGN KEY (auditBewertungID) REFERENCES Look_QM_AuditBewertung(id)
     """),
@@ -571,6 +590,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         linkId INT,
         auditresultId INT,
         auditResultInfo NVARCHAR(MAX),
+        reihenfolge INT NOT NULL DEFAULT 0,
         FOREIGN KEY (auditChecklisteID) REFERENCES STG_QM_AuditCheckliste(id)
     """),
     ("STG_QM_AuditCheck", """
@@ -596,6 +616,10 @@ def init_db():
     _fix_legacy_fachbereich_values()
     _migrate_auditproofs_enrichment_columns()
     _migrate_auditplan_checkliste_column()
+    _migrate_auditprogramm_aktiv_column()
+    _migrate_checkliste_proof_reihenfolge_column()
+    _migrate_auditproofs_reihenfolge_column()
+    _migrate_auditresult_punkte_column()
 
 
 def _column_exists(cur, table, column):
@@ -656,6 +680,29 @@ def _migrate_auditplan_checkliste_column():
     finally:
         conn.close()
 
+
+def _migrate_auditprogramm_aktiv_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditProgramm.aktiv: neue Programme starten
+    per Default inaktiv (aktiv=0) und muessen erst bewusst ueber die Checkbox freigeschaltet
+    werden, bevor sie unter 'Audit planen' auswaehlbar sind. Bei einer bereits bestehenden
+    Datenbank (aeltere Installation) wuerden alle schon vorhandenen Programme durch diesen
+    Default ploetzlich inaktiv und damit nicht mehr auswaehlbar sein - das wuerde laufende
+    Arbeit unterbrechen. Deshalb werden bereits bestehende Programme bei der (einmaligen)
+    Einfuehrung dieser Spalte automatisch auf aktiv=1 gesetzt; nur wirklich NEU angelegte
+    Programme (nach diesem Update) starten inaktiv."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditProgramm", "aktiv"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditProgramm ADD aktiv INT NOT NULL DEFAULT 0")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditProgramm ADD COLUMN aktiv INTEGER NOT NULL DEFAULT 0")
+            cur.execute("UPDATE STG_QM_AuditProgramm SET aktiv = 1")
+            conn.commit()
+    finally:
+        conn.close()
+
     # Altbestand nachziehen: Plaene, die schon Proofs mit auditChecklisteID haben, aber noch
     # kein checklisteId am Plan-Eintrag selbst gesetzt bekamen (weil sie vor dieser Migration
     # angelegt wurden).
@@ -668,6 +715,92 @@ def _migrate_auditplan_checkliste_column():
     """)
     for r in rows:
         execute("UPDATE STG_QM_AuditPlan SET checklisteId=? WHERE id=?", (r["checkliste_id"], r["plan_id"]))
+
+
+def _migrate_checkliste_proof_reihenfolge_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditChecklisteProofs.reihenfolge: legt die
+    Sortierung der Proofs innerhalb einer Checkliste-Vorlage fest (Liste 'Proofs dieser
+    Checkliste' wird aufsteigend danach sortiert). Bei einer bereits bestehenden Datenbank wird
+    die Spalte per ALTER TABLE ergaenzt und fuer bereits vorhandene Proofs je Checkliste
+    rueckwirkend anhand der bisherigen id-Reihenfolge mit 1, 2, 3, ... befuellt (nur dort, wo
+    noch kein Wert gesetzt ist - ein erneuter Lauf veraendert bereits vergebene Werte nicht)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        column_neu = not _column_exists(cur, "STG_QM_AuditChecklisteProofs", "reihenfolge")
+        if column_neu:
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditChecklisteProofs ADD reihenfolge INT NOT NULL DEFAULT 0")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditChecklisteProofs ADD COLUMN reihenfolge INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+    finally:
+        conn.close()
+
+    if not column_neu:
+        return
+
+    checklisten_ids = [r["auditChecklisteID"] for r in query(
+        "SELECT DISTINCT auditChecklisteID FROM STG_QM_AuditChecklisteProofs"
+    )]
+    for cl_id in checklisten_ids:
+        proofs = query(
+            "SELECT id FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ? ORDER BY id",
+            (cl_id,)
+        )
+        for idx, p in enumerate(proofs, start=1):
+            execute(
+                "UPDATE STG_QM_AuditChecklisteProofs SET reihenfolge = ? WHERE id = ?",
+                (idx, p["id"])
+            )
+
+
+def _migrate_auditproofs_reihenfolge_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditProofs.reihenfolge: legt die Sortierung der
+    Proofs innerhalb eines konkreten Audit-Plan-Eintrags fest (PopUp 'Checkliste' wird
+    aufsteigend danach sortiert) - analog zu STG_QM_AuditChecklisteProofs.reihenfolge bei den
+    Vorlagen. Bei einer bereits bestehenden Datenbank wird die Spalte per ALTER TABLE ergaenzt
+    und fuer bereits vorhandene Proofs je Plan rueckwirkend anhand der bisherigen id-Reihenfolge
+    mit 1, 2, 3, ... befuellt."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        column_neu = not _column_exists(cur, "STG_QM_AuditProofs", "reihenfolge")
+        if column_neu:
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditProofs ADD reihenfolge INT NOT NULL DEFAULT 0")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditProofs ADD COLUMN reihenfolge INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+    finally:
+        conn.close()
+
+    if not column_neu:
+        return
+
+    plan_ids = [r["auditPlanId"] for r in query("SELECT DISTINCT auditPlanId FROM STG_QM_AuditProofs")]
+    for plan_id in plan_ids:
+        proofs = query(
+            "SELECT id FROM STG_QM_AuditProofs WHERE auditPlanId = ? ORDER BY id", (plan_id,)
+        )
+        for idx, p in enumerate(proofs, start=1):
+            execute("UPDATE STG_QM_AuditProofs SET reihenfolge = ? WHERE id = ?", (idx, p["id"]))
+
+
+def _migrate_auditresult_punkte_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditResult.punkte: im PopUp 'Proof bearbeiten'
+    (Audit durchfuehren) wird beim Erfassen eines Ergebnisses eine Punktzahl erfasst."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditResult", "punkte"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditResult ADD punkte INT")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditResult ADD COLUMN punkte INTEGER")
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def _fix_legacy_fachbereich_values():
@@ -821,6 +954,20 @@ def _seed_lookups():
             )
             _identity_insert(cur, "Look_QM_AuditBewertung", False)
 
+        if _table_count(cur, "Look_QM_AuditPlanStatus") == 0:
+            _identity_insert(cur, "Look_QM_AuditPlanStatus", True)
+            cur.executemany(
+                "INSERT INTO Look_QM_AuditPlanStatus (id, planStatus, info) VALUES (?, ?, ?)",
+                [
+                    (1, "Entwurf", "Auditplan-Eintrag ist erst angelegt, noch nicht final geplant"),
+                    (2, "Geplant", "Auditplan-Eintrag ist final geplant"),
+                    (3, "Fertig", "Auditplan-Eintrag ist abgeschlossen"),
+                    (4, "Abgebrochen", "Auditplan-Eintrag wurde abgebrochen"),
+                    (5, "Zurueckgestellt", "Auditplan-Eintrag wurde zurueckgestellt"),
+                ],
+            )
+            _identity_insert(cur, "Look_QM_AuditPlanStatus", False)
+
         conn.commit()
     finally:
         conn.close()
@@ -937,11 +1084,11 @@ def lookup_is_referenced(table, id_value):
     checks = {
         "Look_QM_AuditStatus": [
             ("STG_QM_AuditProgramm", "auditStatus"),
-            ("STG_QM_AuditPlan", "auditStatus"),
             ("STG_QM_AuditAbweichung", "abweichungStatus"),
             ("STG_QM_StatusMassnahme", "status"),
             ("STG_QM_StatusMassnahme", "statusNeu"),
         ],
+        "Look_QM_AuditPlanStatus": [("STG_QM_AuditPlan", "auditStatus")],
         "Look_QM_AuditTyp": [("STG_QM_AuditProgramm", "auditTyp")],
         "Look_QM_AuditBewertung": [("STG_QM_AuditResult", "auditBewertungID")],
         "Look_QM_AuditProzess": [
@@ -977,17 +1124,47 @@ def get_audit_programm(programm_id):
     return query("SELECT * FROM STG_QM_AuditProgramm WHERE id = ?", (programm_id,), fetchone=True)
 
 
+def list_active_audit_programme():
+    """Auditprogramme mit Status 'aktiv' - nur diese duerfen unter 'Audit planen' fuer neue/
+    bestehende Auditplan-Eintraege ausgewaehlt werden."""
+    return query("""
+        SELECT p.*, s.auditStatus AS statusName
+        FROM STG_QM_AuditProgramm p
+        LEFT JOIN Look_QM_AuditStatus s ON s.id = p.auditStatus
+        WHERE p.aktiv = 1
+        ORDER BY p.auditJahr DESC, p.id DESC
+    """)
+
+
+def list_audit_programme_planbar(status_filter=None):
+    """Auditprogramme fuer die Auswahl in 'Audit planen' > vorhandene Auditplaene: Programme
+    im Status 'Erfasst' werden grundsaetzlich ausgeblendet (dort ist die Planung/Durchfuehrung
+    noch nicht vorgesehen). Optional zusaetzlich auf einen bestimmten Status einschraenkbar."""
+    sql = """
+        SELECT p.*, s.auditStatus AS statusName
+        FROM STG_QM_AuditProgramm p
+        LEFT JOIN Look_QM_AuditStatus s ON s.id = p.auditStatus
+        WHERE (s.auditStatus IS NULL OR s.auditStatus <> 'Erfasst')
+    """
+    params = ()
+    if status_filter:
+        sql += " AND p.auditStatus = ?"
+        params = (status_filter,)
+    sql += " ORDER BY p.auditJahr DESC, p.id DESC"
+    return query(sql, params)
+
+
 def create_audit_programm(data):
     return execute("""
         INSERT INTO STG_QM_AuditProgramm
         (auditTyp, auditJahr, norm, auditor, auditStatus, unternehmen, standort,
-         startDatum, endDatum, beauftragt, beauftragtAm, beauftragtInfo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         startDatum, endDatum, beauftragt, beauftragtAm, beauftragtInfo, aktiv)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("auditTyp"), data.get("auditJahr"), data.get("norm"), data.get("auditor"),
         data.get("auditStatus"), data.get("unternehmen"), data.get("standort"),
         data.get("startDatum"), data.get("endDatum"), data.get("beauftragt"),
-        data.get("beauftragtAm"), data.get("beauftragtInfo"),
+        data.get("beauftragtAm"), data.get("beauftragtInfo"), data.get("aktiv") or 0,
     ))
 
 
@@ -995,14 +1172,42 @@ def update_audit_programm(programm_id, data):
     execute("""
         UPDATE STG_QM_AuditProgramm SET
         auditTyp=?, auditJahr=?, norm=?, auditor=?, auditStatus=?, unternehmen=?, standort=?,
-        startDatum=?, endDatum=?, beauftragt=?, beauftragtAm=?, beauftragtInfo=?
+        startDatum=?, endDatum=?, beauftragt=?, beauftragtAm=?, beauftragtInfo=?, aktiv=?
         WHERE id=?
     """, (
         data.get("auditTyp"), data.get("auditJahr"), data.get("norm"), data.get("auditor"),
         data.get("auditStatus"), data.get("unternehmen"), data.get("standort"),
         data.get("startDatum"), data.get("endDatum"), data.get("beauftragt"),
-        data.get("beauftragtAm"), data.get("beauftragtInfo"), programm_id,
+        data.get("beauftragtAm"), data.get("beauftragtInfo"), data.get("aktiv") or 0, programm_id,
     ))
+
+
+def delete_audit_programm(programm_id):
+    """Loescht ein Auditprogramm vollstaendig samt aller untergeordneten Daten: Auditziele
+    sowie alle zugehoerigen Auditplan-Eintraege inkl. deren zugeordneter Checkliste/Proofs und
+    aller davon abhaengigen Ergebnisse/Abweichungen/Massnahmen/Interviews/Anhaenge/Links
+    (wiederverwendet dieselbe Kaskade wie delete_audit_plan fuer jeden einzelnen Plan-Eintrag)."""
+    plan_ids = [
+        p["id"] for p in query(
+            "SELECT id FROM STG_QM_AuditPlan WHERE auditProgrammId = ?", (programm_id,)
+        )
+    ]
+    for plan_id in plan_ids:
+        delete_audit_plan(plan_id)
+    execute("DELETE FROM STG_QM_AuditZiele WHERE auditProgramId = ?", (programm_id,))
+    execute("DELETE FROM STG_QM_AuditProgramm WHERE id = ?", (programm_id,))
+
+
+def update_audit_programm_status(programm_id, status_id):
+    """Schneller Status-Wechsel direkt aus der Liste 'vorhandene Auditprogramme', ohne das
+    komplette Bearbeiten-Popup oeffnen zu muessen."""
+    execute("UPDATE STG_QM_AuditProgramm SET auditStatus=? WHERE id=?", (status_id, programm_id))
+
+
+def set_audit_programm_aktiv(programm_id, aktiv):
+    """Schneller Aktiv/Inaktiv-Toggle direkt aus der Liste 'vorhandene Auditprogramme',
+    ohne das komplette Bearbeiten-Popup oeffnen zu muessen."""
+    execute("UPDATE STG_QM_AuditProgramm SET aktiv=? WHERE id=?", (1 if aktiv else 0, programm_id))
 
 
 def list_audit_ziele(programm_id):
@@ -1024,12 +1229,12 @@ def delete_audit_ziel(ziel_id):
 
 def list_audit_plaene(programm_id=None):
     sql = """
-        SELECT pl.*, pr.processName AS prozessName, s.auditStatus AS statusName,
+        SELECT pl.*, pr.processName AS prozessName, s.planStatus AS statusName,
                prog.startDatum AS progStart, prog.endDatum AS progEnde, prog.auditJahr,
                fb.fachbereich AS fachbereichName, fb.leitung AS fachbereichLeitung
         FROM STG_QM_AuditPlan pl
         LEFT JOIN Look_QM_AuditProzess pr ON pr.id = pl.auditProzess
-        LEFT JOIN Look_QM_AuditStatus s ON s.id = pl.auditStatus
+        LEFT JOIN Look_QM_AuditPlanStatus s ON s.id = pl.auditStatus
         LEFT JOIN STG_QM_AuditProgramm prog ON prog.id = pl.auditProgrammId
         LEFT JOIN Look_QM_Fachbereich fb ON fb.id = pl.fachbereich
     """
@@ -1172,25 +1377,61 @@ def update_proof(proof_id, data):
     ))
 
 
+def update_plan_proof(proof_id, frage, norm_kapitel, info, reihenfolge):
+    """Aktualisiert einen Proof im PopUp 'Checkliste' (Audit planen): Frage, Norm-Kapitel, Info
+    und Reihenfolge. Die Felder Punkte/Auditor/Bewertung/Beispiel werden hier bewusst NICHT
+    angefasst und bleiben unveraendert erhalten - sie werden in diesem PopUp nicht mehr
+    angezeigt/bearbeitet."""
+    execute("""
+        UPDATE STG_QM_AuditProofs SET auditFrage=?, normKapitel=?, auditResultInfo=?, reihenfolge=?
+        WHERE id=?
+    """, (frage, norm_kapitel, info, reihenfolge, proof_id))
+
+
+def update_plan_proof_reihenfolge(proof_id, reihenfolge):
+    execute("UPDATE STG_QM_AuditProofs SET reihenfolge=? WHERE id=?", (reihenfolge, proof_id))
+
+
 def add_manual_proof_to_plan(plan_id, data):
     """Fuegt einen Proof manuell direkt in einen Audit-Plan-Eintrag ein (nicht aus einer
     Checklisten-Vorlage uebernommen). auditChecklisteID bleibt dabei NULL - so bleibt
-    nachvollziehbar, dass dieser Proof nicht aus einer Vorlage stammt."""
+    nachvollziehbar, dass dieser Proof nicht aus einer Vorlage stammt.
+
+    Die Position (reihenfolge) kann gezielt angegeben werden: der an dieser Position bereits
+    vorhandene Proof und alle nachfolgenden ruecken automatisch um 1 nach hinten. Ohne Angabe
+    wird der neue Proof ans Ende der Checkliste angehaengt."""
+    reihenfolge = data.get("reihenfolge")
+    if reihenfolge in (None, ""):
+        row = query(
+            "SELECT MAX(reihenfolge) AS maxr FROM STG_QM_AuditProofs WHERE auditPlanId = ?",
+            (plan_id,), fetchone=True
+        )
+        reihenfolge = (row["maxr"] or 0) + 1 if row else 1
+    else:
+        reihenfolge = int(reihenfolge)
+        execute(
+            "UPDATE STG_QM_AuditProofs SET reihenfolge = reihenfolge + 1 WHERE auditPlanId = ? AND reihenfolge >= ?",
+            (plan_id, reihenfolge)
+        )
     return execute("""
         INSERT INTO STG_QM_AuditProofs
-        (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo,
-         punkte, auditor, bewertung, beispiel)
-        VALUES (?, NULL, ?, ?, '', ?, ?, ?, ?)
+        (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo, reihenfolge)
+        VALUES (?, NULL, ?, ?, ?, ?)
     """, (
         plan_id, data.get("auditFrage"), data.get("normKapitel"),
-        data.get("punkte"), data.get("auditor"), data.get("bewertung"), data.get("beispiel"),
+        data.get("auditResultInfo", ""), reihenfolge,
     ))
 
 
 def delete_proof(proof_id):
     """Loescht einen einzelnen Proof aus einem Audit-Plan (z.B. um einen versehentlich
     manuell angelegten Proof wieder zu entfernen) inkl. aller davon abhaengigen Ergebnisse,
-    Abweichungen, Massnahmen, Interviews, Anhaenge und Links."""
+    Abweichungen, Massnahmen, Interviews, Anhaenge und Links. Alle nachfolgenden Proofs
+    desselben Plans (hoehere reihenfolge) ruecken danach automatisch um 1 nach vorne, damit die
+    Reihenfolge luecken- und konsistent bleibt."""
+    proof = query(
+        "SELECT auditPlanId, reihenfolge FROM STG_QM_AuditProofs WHERE id = ?", (proof_id,), fetchone=True
+    )
     execute("""
         DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID IN (
             SELECT m.id FROM STG_QM_AuditMassnahme m
@@ -1216,6 +1457,12 @@ def delete_proof(proof_id):
     execute("DELETE FROM STG_QM_AuditAnhang WHERE auditProofsId = ?", (proof_id,))
     execute("DELETE FROM STG_QM_AuditLink WHERE auditProofsId = ?", (proof_id,))
     execute("DELETE FROM STG_QM_AuditProofs WHERE id = ?", (proof_id,))
+    if proof:
+        execute(
+            "UPDATE STG_QM_AuditProofs SET reihenfolge = reihenfolge - 1 "
+            "WHERE auditPlanId = ? AND reihenfolge > ?",
+            (proof["auditPlanId"], proof["reihenfolge"])
+        )
 
 
 # --------------------------------------------------------------------------
@@ -1250,19 +1497,39 @@ def update_checkliste(checkliste_id, data):
 
 
 def delete_checkliste(checkliste_id):
+    """Loescht eine Checkliste-Vorlage samt ihrer eigenen Proofs/Versionen. Auf MSSQL sind diese
+    per FOREIGN KEY an die Checkliste gebunden (STG_QM_AuditChecklisteProofs.auditChecklisteID,
+    STG_QM_AuditChecklisteVersion.auditChecklisteID) - ohne vorheriges Loeschen wuerde die
+    Datenbank die DELETE-Anweisung mit einem IntegrityError ablehnen (in SQLite faellt das
+    nicht auf, da dort Fremdschluessel standardmaessig nicht erzwungen werden). Auditplan-
+    Eintraege, die diese Checkliste bereits uebernommen haben (STG_QM_AuditPlan.checklisteId),
+    werden NICHT geloescht, sondern nur von der (jetzt entfernten) Vorlage entkoppelt - ihre
+    bereits kopierten Proofs in STG_QM_AuditProofs bleiben unveraendert erhalten."""
+    execute("DELETE FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ?", (checkliste_id,))
+    execute("DELETE FROM STG_QM_AuditChecklisteVersion WHERE auditChecklisteID = ?", (checkliste_id,))
+    execute("UPDATE STG_QM_AuditPlan SET checklisteId = NULL WHERE checklisteId = ?", (checkliste_id,))
     execute("DELETE FROM STG_QM_AuditCheckliste WHERE id = ?", (checkliste_id,))
 
 
 def list_checkliste_proofs(checkliste_id):
-    return query("SELECT * FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ? ORDER BY id",
+    return query("SELECT * FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ? ORDER BY reihenfolge, id",
                  (checkliste_id,))
 
 
+def get_checkliste_proof(proof_id):
+    return query("SELECT * FROM STG_QM_AuditChecklisteProofs WHERE id = ?", (proof_id,), fetchone=True)
+
+
 def add_checkliste_proof(checkliste_id, frage, norm_kapitel, info=""):
+    row = query(
+        "SELECT MAX(reihenfolge) AS maxr FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ?",
+        (checkliste_id,), fetchone=True
+    )
+    reihenfolge = (row["maxr"] or 0) + 1 if row else 1
     return execute("""
-        INSERT INTO STG_QM_AuditChecklisteProofs (auditChecklisteID, auditFrage, normKapitel, auditResultInfo)
-        VALUES (?, ?, ?, ?)
-    """, (checkliste_id, frage, norm_kapitel, info))
+        INSERT INTO STG_QM_AuditChecklisteProofs (auditChecklisteID, auditFrage, normKapitel, auditResultInfo, reihenfolge)
+        VALUES (?, ?, ?, ?, ?)
+    """, (checkliste_id, frage, norm_kapitel, info, reihenfolge))
 
 
 def update_checkliste_proof(proof_id, frage, norm_kapitel, info=""):
@@ -1270,6 +1537,10 @@ def update_checkliste_proof(proof_id, frage, norm_kapitel, info=""):
         UPDATE STG_QM_AuditChecklisteProofs SET auditFrage=?, normKapitel=?, auditResultInfo=?
         WHERE id=?
     """, (frage, norm_kapitel, info, proof_id))
+
+
+def update_checkliste_proof_reihenfolge(proof_id, reihenfolge):
+    execute("UPDATE STG_QM_AuditChecklisteProofs SET reihenfolge=? WHERE id=?", (reihenfolge, proof_id))
 
 
 def delete_checkliste_proof(proof_id):
@@ -1310,9 +1581,9 @@ def copy_checkliste_to_proofs(plan_id, checkliste_id):
     for p in proofs:
         execute("""
             INSERT INTO STG_QM_AuditProofs
-            (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo)
-            VALUES (?, ?, ?, ?, ?)
-        """, (plan_id, checkliste_id, p["auditFrage"], p["normKapitel"], p["auditResultInfo"]))
+            (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo, reihenfolge)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (plan_id, checkliste_id, p["auditFrage"], p["normKapitel"], p["auditResultInfo"], p["reihenfolge"]))
     execute("UPDATE STG_QM_AuditPlan SET checklisteId=? WHERE id=?", (checkliste_id, plan_id))
     return len(proofs)
 
@@ -1334,7 +1605,7 @@ def list_proofs_for_plan(plan_id):
                ) AS letzteBewertung
         FROM STG_QM_AuditProofs pf
         WHERE pf.auditPlanId = ?
-        ORDER BY pf.id
+        ORDER BY pf.reihenfolge, pf.id
     """, (plan_id,))
 
 
@@ -1351,12 +1622,25 @@ def list_results_for_proof(proof_id):
     """, (proof_id,))
 
 
-def add_audit_result(proof_id, name_auditor, bewertung_id, datum, antwort, info=""):
+def add_audit_result(proof_id, name_auditor, datum, info="", punkte=None):
+    """Erfasst ein Ergebnis zu einem Proof (PopUp 'Proof bearbeiten' unter 'Audit durchfuehren'):
+    Auditor(en) - als ein mit '; ' verbundener Text - , Datum, Info (Richtext) und Punkte. Die
+    Klassifizierung (Bewertung: Konform/Abweichung/Empfehlung) wird hier bewusst NICHT erfasst,
+    sondern erst beim Erfassen einer Abweichung zu diesem Ergebnis nachtraeglich gesetzt (siehe
+    update_result_bewertung)."""
     return execute("""
         INSERT INTO STG_QM_AuditResult
-        (auditProofsId, nameAuditor, auditBewertungID, datumerfasst, antwort, auditResultInfo)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (proof_id, name_auditor, bewertung_id, datum, antwort, info))
+        (auditProofsId, nameAuditor, datumerfasst, auditResultInfo, punkte)
+        VALUES (?, ?, ?, ?, ?)
+    """, (proof_id, name_auditor, datum, info, punkte))
+
+
+def get_result(result_id):
+    return query("SELECT * FROM STG_QM_AuditResult WHERE id = ?", (result_id,), fetchone=True)
+
+
+def update_result_bewertung(result_id, bewertung_id):
+    execute("UPDATE STG_QM_AuditResult SET auditBewertungID=? WHERE id=?", (bewertung_id, result_id))
 
 
 def add_anhang(proof_id, checkliste_id, anhang):

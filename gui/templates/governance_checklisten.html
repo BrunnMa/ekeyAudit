@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Checklisten - {{ app_title }}{% endblock %}
+{% block title %}Checklistenvorlagen - {{ app_title }}{% endblock %}
+{% import "_macros_richtext.html" as rt %}
+
 {% block content %}
-<h1 class="ekey-h1">Audit governance - Checklisten anlegen</h1>
+<h1 class="ekey-h1">Audit governance - Checklistenvorlagen erstellen</h1>
 
 <div class="ekey-form-actions" style="margin-bottom: 16px;">
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeueCheckliste')">+ Neue Checkliste anlegen</button>
@@ -58,11 +60,14 @@
         <thead><tr><th>Bezeichnung</th><th>Prozess</th><th>Eigner</th><th>Proofs</th><th>Aktion</th></tr></thead>
         <tbody>
         {% for c in checklisten %}
-            <tr>
+            <tr {% if checkliste_selected_id and checkliste_selected_id|string == c.id|string %}style="background: var(--ekey-table-header);"{% endif %}>
                 <td>{{ c.bezeichnung }}</td>
                 <td>{{ c.prozessName }}</td>
                 <td>{{ c.eigner }}</td>
-                <td><a href="{{ url_for('gui.governance_proofs', checkliste_id=c.id) }}" class="ekey-btn ekey-btn-small">Proofs verwalten</a></td>
+                <td>
+                    <a href="{{ url_for('gui.governance_checklisten', checkliste=c.id) }}" class="ekey-btn ekey-btn-small
+                        {% if checkliste_selected_id and checkliste_selected_id|string == c.id|string %}ekey-btn-active{% endif %}">Proofs anzeigen</a>
+                </td>
                 <td>
                     <a href="{{ url_for('gui.governance_checklisten', edit=c.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
                     <form method="post" action="{{ url_for('gui.governance_checkliste_delete', checkliste_id=c.id) }}" style="display:inline">
@@ -72,6 +77,111 @@
             </tr>
         {% else %}
             <tr><td colspan="5">Keine Checklisten vorhanden.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="ekey-panel">
+    <h2 class="ekey-h2">Proofs dieser Checkliste{% if checkliste_selected %}: {{ checkliste_selected.bezeichnung }}{% endif %}</h2>
+
+    {% if checkliste_selected_id %}
+    <div class="ekey-form-actions" style="margin-bottom: 16px;">
+        <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProof')">+ Neuen Proof anlegen</button>
+    </div>
+
+    <div id="modalNeuerProof" class="ekey-modal-overlay">
+    <div class="ekey-modal">
+    <div class="ekey-modal-header">
+        <h2>Neuen Proof (Pruefpunkt) hinzufuegen</h2>
+        <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerProof')" title="Schliessen">&times;</button>
+    </div>
+    <div class="ekey-modal-body">
+        <form method="post" action="{{ url_for('gui.governance_checklisten') }}">
+            <input type="hidden" name="form_type" value="proof">
+            <input type="hidden" name="checkliste_id" value="{{ checkliste_selected_id }}">
+            <input type="hidden" name="action" value="add">
+            <div class="ekey-form-grid">
+                {{ rt.richtext_field('auditFrage', 'Auditfrage') }}
+                <div class="ekey-form-row">
+                    <label for="normKapitel">Norm-Kapitel</label>
+                    <input type="text" id="normKapitel" name="normKapitel">
+                </div>
+                {{ rt.richtext_field('auditResultInfo', 'Info') }}
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Hinzufuegen</button>
+                <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerProof')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+    </div>
+    </div>
+
+    <div id="modalProofBearbeiten" class="ekey-modal-overlay{% if edit_proof %} ekey-modal-open{% endif %}">
+    <div class="ekey-modal">
+    <div class="ekey-modal-header">
+        <h2>Proof aendern</h2>
+        <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalProofBearbeiten')" title="Schliessen">&times;</button>
+    </div>
+    <div class="ekey-modal-body">
+        <form method="post" action="{{ url_for('gui.governance_checklisten') }}">
+            <input type="hidden" name="form_type" value="proof">
+            <input type="hidden" name="checkliste_id" value="{{ checkliste_selected_id }}">
+            <input type="hidden" name="proof_id" value="{{ edit_proof.id if edit_proof else '' }}">
+            <input type="hidden" name="action" value="edit">
+            <div class="ekey-form-grid">
+                {{ rt.richtext_field('auditFrage', 'Auditfrage', edit_proof.auditFrage if edit_proof else '') }}
+                <div class="ekey-form-row">
+                    <label for="normKapitelEdit">Norm-Kapitel</label>
+                    <input type="text" id="normKapitelEdit" name="normKapitel" value="{{ edit_proof.normKapitel if edit_proof else '' }}">
+                </div>
+                {{ rt.richtext_field('auditResultInfo', 'Info', edit_proof.auditResultInfo if edit_proof else '') }}
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+                <a href="{{ url_for('gui.governance_checklisten', checkliste=checkliste_selected_id) }}" class="ekey-btn">Abbrechen</a>
+            </div>
+        </form>
+    </div>
+    </div>
+    </div>
+    {% else %}
+    <p class="ekey-hint">Bitte oben in der Liste "Vorhandene Checklisten" ueber "Proofs anzeigen" eine Checkliste waehlen, um Proofs anzuzeigen oder anzulegen.</p>
+    {% endif %}
+
+    <table class="ekey-table">
+        <thead><tr><th class="ekey-th-reihenfolge">Reihen-<br>folge</th><th>Frage</th><th>Norm-Kapitel</th><th>Info</th><th>Aktion</th></tr></thead>
+        <tbody>
+        {% for p in proofs %}
+            <tr>
+                <td class="ekey-td-reihenfolge">
+                    <form method="post" action="{{ url_for('gui.governance_checklisten') }}">
+                        <input type="hidden" name="form_type" value="proof">
+                        <input type="hidden" name="checkliste_id" value="{{ checkliste_selected_id }}">
+                        <input type="hidden" name="proof_id" value="{{ p.id }}">
+                        <input type="hidden" name="action" value="reihenfolge">
+                        <input type="number" name="reihenfolge" value="{{ p.reihenfolge }}" class="ekey-inline-number" onchange="this.form.submit()">
+                    </form>
+                </td>
+                <td class="ekey-richtext-display">{{ p.auditFrage | safe }}</td>
+                <td>{{ p.normKapitel }}</td>
+                <td class="ekey-richtext-display">{{ p.auditResultInfo | safe }}</td>
+                <td>
+                    <div class="ekey-actions-row">
+                        <a href="{{ url_for('gui.governance_checklisten', checkliste=checkliste_selected_id, proof_edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                        <form method="post" action="{{ url_for('gui.governance_checklisten') }}" style="display:inline">
+                            <input type="hidden" name="form_type" value="proof">
+                            <input type="hidden" name="checkliste_id" value="{{ checkliste_selected_id }}">
+                            <input type="hidden" name="proof_id" value="{{ p.id }}">
+                            <input type="hidden" name="action" value="delete">
+                            <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">Keine Proofs vorhanden.</td></tr>
         {% endfor %}
         </tbody>
     </table>

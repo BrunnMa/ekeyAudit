@@ -1,7 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Audit planen - {{ app_title }}{% endblock %}
+{% import "_macros_richtext.html" as rt %}
 {% block content %}
 <h1 class="ekey-h1">Audit planen</h1>
+
+{% set status_farben = {
+    'Entwurf': '#000000',
+    'Geplant': 'var(--ekey-success)',
+    'Fertig': 'var(--ekey-primary)',
+    'Abgebrochen': 'var(--ekey-error)',
+    'Zurueckgestellt': '#888888'
+} %}
 
 <div class="ekey-form-actions" style="margin-bottom: 16px;">
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerAuditplanEintrag')">+ Neuer Auditplan-Eintrag erstellen</button>
@@ -23,10 +32,11 @@
                 <label for="auditProgrammId">Auditprogramm</label>
                 <select id="auditProgrammId" name="auditProgrammId" required>
                     <option value="">-- auswaehlen --</option>
-                    {% for p in programme %}
-                    <option value="{{ p.id }}" {% if edit_plan and edit_plan.auditProgrammId|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }})</option>
+                    {% for p in programme_auswahl %}
+                    <option value="{{ p.id }}" {% if edit_plan and edit_plan.auditProgrammId|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }}){% if not p.aktiv %} (inaktiv){% endif %}</option>
                     {% endfor %}
                 </select>
+                <span class="ekey-hint">Es koennen nur aktive Auditprogramme gewaehlt werden (siehe "Auditprogramm erstellen").</span>
             </div>
             <div class="ekey-form-row">
                 <label for="fachbereich">Fachbereich</label>
@@ -61,9 +71,17 @@
             </div>
             <div class="ekey-form-row">
                 <label for="auditStatus">Status</label>
-                <select id="auditStatus" name="auditStatus">
+                {% set ns_status = namespace(farbe=status_farben.get('Entwurf', '')) %}
+                {% for s in audit_status %}
+                    {% if edit_plan and edit_plan.auditStatus|string == s.id|string %}
+                        {% set ns_status.farbe = status_farben.get(s.planStatus, '') %}
+                    {% endif %}
+                {% endfor %}
+                <select id="auditStatus" name="auditStatus" onchange="this.style.color = this.options[this.selectedIndex].style.color;"
+                        style="color: {{ ns_status.farbe }}; font-weight: bold;">
                     {% for s in audit_status %}
-                    <option value="{{ s.id }}" {% if edit_plan and edit_plan.auditStatus|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
+                    <option value="{{ s.id }}" style="color: {{ status_farben.get(s.planStatus, '') }};"
+                            {% if edit_plan and edit_plan.auditStatus|string == s.id|string %}selected{% endif %}>{{ s.planStatus }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -96,109 +114,6 @@
             <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerAuditplanEintrag')">Abbrechen</button>
         </div>
     </form>
-
-    {% if edit_plan %}
-    <hr class="ekey-form-hr">
-    <h3 class="ekey-group-heading">{% if assigned_checkliste_name %}Checkliste: {{ assigned_checkliste_name }} - {% endif %}Proofs</h3>
-    {% if assigned_checkliste_id and not edit_plan_proofs %}
-    <p class="ekey-muted">Die zugeordnete Checkliste "{{ assigned_checkliste_name or '-' }}" enthaelt aktuell keine
-        Proofs/Pruefpunkte aus der Vorlage. Proofs koennen weiter unten manuell hinzugefuegt werden.</p>
-    {% elif not edit_plan_proofs %}
-    <p class="ekey-muted">Es sind noch keine Proofs erfasst. Proofs koennen entweder ueber eine zugeordnete
-        Checkliste uebernommen oder weiter unten manuell hinzugefuegt werden.</p>
-    {% else %}
-    <p class="ekey-muted">Frage, Norm-Kapitel, Punkte, Auditor, Bewertung und Beispiel koennen hier je Proof
-        bearbeitet und pro Zeile einzeln gespeichert werden.</p>
-    {% endif %}
-
-    {% if edit_plan_proofs %}
-    {% for pf in edit_plan_proofs %}
-    <form id="proofForm{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_update', proof_id=pf.id) }}">
-        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="edit">
-    </form>
-    <form id="proofDeleteForm{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}">
-        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="edit">
-    </form>
-    {% endfor %}
-
-    <table class="ekey-table">
-        <thead>
-        <tr>
-            <th>Frage</th><th>Norm-Kapitel</th><th>Punkte</th><th>Auditor</th>
-            <th>Bewertung</th><th>Beispiel</th><th>Aktion</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for pf in edit_plan_proofs %}
-            <tr>
-                <td>
-                    <input type="text" name="auditFrage" form="proofForm{{ pf.id }}" value="{{ pf.auditFrage or '' }}">
-                </td>
-                <td>
-                    <input type="text" name="normKapitel" form="proofForm{{ pf.id }}" value="{{ pf.normKapitel or '' }}" style="width: 90px;">
-                </td>
-                <td>
-                    <input type="number" name="punkte" form="proofForm{{ pf.id }}"
-                           value="{{ pf.punkte if pf.punkte is not none else '' }}" style="width: 70px;">
-                </td>
-                <td>
-                    <input type="text" name="auditor" form="proofForm{{ pf.id }}" value="{{ pf.auditor or '' }}">
-                </td>
-                <td>
-                    <textarea name="bewertung" form="proofForm{{ pf.id }}" rows="2">{{ pf.bewertung or '' }}</textarea>
-                </td>
-                <td>
-                    <textarea name="beispiel" form="proofForm{{ pf.id }}" rows="2">{{ pf.beispiel or '' }}</textarea>
-                </td>
-                <td>
-                    <button type="submit" form="proofForm{{ pf.id }}" class="ekey-btn ekey-btn-small">Speichern</button>
-                    <button type="submit" form="proofDeleteForm{{ pf.id }}" class="ekey-btn ekey-btn-small"
-                            onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
-
-    <hr class="ekey-form-hr">
-    <h4 class="ekey-group-heading">Neuen Proof manuell hinzufuegen</h4>
-    <form method="post" action="{{ url_for('gui.audit_plan_proof_add', plan_id=edit_plan.id) }}">
-        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="edit">
-        <div class="ekey-form-grid">
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofFrageEdit{{ edit_plan.id }}">Frage</label>
-                <input type="text" id="newProofFrageEdit{{ edit_plan.id }}" name="auditFrage" required>
-            </div>
-            <div class="ekey-form-row">
-                <label for="newProofNormEdit{{ edit_plan.id }}">Norm-Kapitel</label>
-                <input type="text" id="newProofNormEdit{{ edit_plan.id }}" name="normKapitel">
-            </div>
-            <div class="ekey-form-row">
-                <label for="newProofPunkteEdit{{ edit_plan.id }}">Punkte</label>
-                <input type="number" id="newProofPunkteEdit{{ edit_plan.id }}" name="punkte">
-            </div>
-            <div class="ekey-form-row">
-                <label for="newProofAuditorEdit{{ edit_plan.id }}">Auditor</label>
-                <input type="text" id="newProofAuditorEdit{{ edit_plan.id }}" name="auditor">
-            </div>
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofBewertungEdit{{ edit_plan.id }}">Bewertung</label>
-                <textarea id="newProofBewertungEdit{{ edit_plan.id }}" name="bewertung" rows="2"></textarea>
-            </div>
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofBeispielEdit{{ edit_plan.id }}">Beispiel</label>
-                <textarea id="newProofBeispielEdit{{ edit_plan.id }}" name="beispiel" rows="2"></textarea>
-            </div>
-        </div>
-        <div class="ekey-form-actions">
-            <button type="submit" class="ekey-btn ekey-btn-primary">Proof hinzufuegen</button>
-        </div>
-    </form>
-    {% endif %}
 </div>
 </div>
 </div>
@@ -207,11 +122,20 @@
     <h2 class="ekey-h2">Vorhandene Auditplaene</h2>
     <form method="get" action="{{ url_for('gui.audit_plan') }}" class="ekey-filter-row">
         <div class="ekey-form-row">
+            <label for="statusFilterProgramm">Status (Auditprogramm)</label>
+            <select id="statusFilterProgramm" name="statusFilterProgramm" onchange="this.form.submit()">
+                <option value="">-- Alle --</option>
+                {% for s in programm_status_optionen %}
+                <option value="{{ s.id }}" {% if status_filter_programm and status_filter_programm|string == s.id|string %}selected{% endif %}>{{ s.auditStatus }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="ekey-form-row">
             <label for="programmFilter">Auditprogramm</label>
             <select id="programmFilter" name="programmFilter" onchange="this.form.submit()">
                 <option value="">-- Auditprogramm waehlen --</option>
-                {% for p in programme %}
-                <option value="{{ p.id }}" {% if programm_filter and programm_filter|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }}</option>
+                {% for p in programme_filter_optionen %}
+                <option value="{{ p.id }}" {% if programm_filter and programm_filter|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.statusName }})</option>
                 {% endfor %}
             </select>
         </div>
@@ -223,8 +147,8 @@
     <table class="ekey-table">
         <thead>
         <tr>
-            <th>#</th><th>Programm-Jahr</th><th>Fachbereich</th><th>Prozess</th>
-            <th>Verantwortlich</th><th>Audit-Ende</th><th>Interview</th><th>Status</th><th>Aktionen</th>
+            <th>#</th><th>Programm-Jahr</th><th>Prozess</th><th>Fachbereich</th><th>Status</th>
+            <th>Verantwortlich</th><th>Audit-Ende</th><th>Interview</th><th>Aktionen</th>
         </tr>
         </thead>
         <tbody>
@@ -232,12 +156,23 @@
             <tr>
                 <td>{{ pl.id }}</td>
                 <td>{{ pl.auditJahr }}</td>
-                <td>{{ pl.fachbereichName }}</td>
                 <td>{{ pl.prozessName }}</td>
+                <td>{{ pl.fachbereichName }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('gui.audit_plan_status_update', plan_id=pl.id) }}" class="ekey-inline-form">
+                        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+                        <select name="auditStatus" onchange="this.form.submit()"
+                                style="color: {{ status_farben.get(pl.statusName, '') }}; font-weight: bold;">
+                            {% for s in audit_status %}
+                            <option value="{{ s.id }}" style="color: {{ status_farben.get(s.planStatus, '') }};"
+                                    {% if pl.auditStatus|string == s.id|string %}selected{% endif %}>{{ s.planStatus }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </td>
                 <td>{{ pl.verantwortlich }}</td>
                 <td>{{ pl.datumAuditEnde }}</td>
                 <td>{{ pl.datumInterview }}</td>
-                <td>{{ pl.statusName }}</td>
                 <td>
                     <a href="{{ url_for('gui.audit_plan', edit=pl.id, programmFilter=programm_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
                     <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalChecklistePlan{{ pl.id }}')">Checkliste</button>
@@ -268,102 +203,112 @@
         Proofs/Pruefpunkte aus der Vorlage. Proofs koennen weiter unten manuell hinzugefuegt werden.</p>
     {% elif not proofs %}
     <p class="ekey-muted">Es sind noch keine Proofs erfasst. Proofs koennen entweder ueber eine ueber "Bearbeiten"
-        zugeordnete Checkliste uebernommen oder weiter unten manuell hinzugefuegt werden.</p>
-    {% else %}
-    <p class="ekey-muted">Frage, Norm-Kapitel, Punkte, Auditor, Bewertung und Beispiel koennen hier je Proof
-        bearbeitet und pro Zeile einzeln gespeichert werden.</p>
+        zugeordnete Checkliste uebernommen oder ueber "+ Proof manuell hinzufuegen" erfasst werden.</p>
     {% endif %}
 
-    {% if proofs %}
-    {% for pf in proofs %}
-    <form id="proofFormList{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_update', proof_id=pf.id) }}">
-        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="list">
-    </form>
-    <form id="proofDeleteFormList{{ pf.id }}" method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}">
-        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="list">
-    </form>
-    {% endfor %}
+    <div class="ekey-form-actions" style="margin-bottom: 16px;">
+        <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProofPlan{{ pl.id }}')">+ Proof manuell hinzufuegen</button>
+    </div>
 
     <table class="ekey-table">
         <thead>
         <tr>
-            <th>Frage</th><th>Norm-Kapitel</th><th>Punkte</th><th>Auditor</th>
-            <th>Bewertung</th><th>Beispiel</th><th>Aktion</th>
+            <th class="ekey-th-reihenfolge">Reihen-<br>folge</th><th>Frage</th><th>Norm-Kapitel</th><th>Info</th><th>Aktion</th>
         </tr>
         </thead>
         <tbody>
         {% for pf in proofs %}
             <tr>
-                <td>
-                    <input type="text" name="auditFrage" form="proofFormList{{ pf.id }}" value="{{ pf.auditFrage or '' }}">
+                <td class="ekey-td-reihenfolge">
+                    <form method="post" action="{{ url_for('gui.audit_plan_proof_reihenfolge', proof_id=pf.id) }}">
+                        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+                        <input type="number" name="reihenfolge" value="{{ pf.reihenfolge }}" class="ekey-inline-number" onchange="this.form.submit()">
+                    </form>
                 </td>
+                <td class="ekey-richtext-display">{{ pf.auditFrage | safe }}</td>
+                <td>{{ pf.normKapitel }}</td>
+                <td class="ekey-richtext-display">{{ pf.auditResultInfo | safe }}</td>
                 <td>
-                    <input type="text" name="normKapitel" form="proofFormList{{ pf.id }}" value="{{ pf.normKapitel or '' }}" style="width: 90px;">
-                </td>
-                <td>
-                    <input type="number" name="punkte" form="proofFormList{{ pf.id }}"
-                           value="{{ pf.punkte if pf.punkte is not none else '' }}" style="width: 70px;">
-                </td>
-                <td>
-                    <input type="text" name="auditor" form="proofFormList{{ pf.id }}" value="{{ pf.auditor or '' }}">
-                </td>
-                <td>
-                    <textarea name="bewertung" form="proofFormList{{ pf.id }}" rows="2">{{ pf.bewertung or '' }}</textarea>
-                </td>
-                <td>
-                    <textarea name="beispiel" form="proofFormList{{ pf.id }}" rows="2">{{ pf.beispiel or '' }}</textarea>
-                </td>
-                <td>
-                    <button type="submit" form="proofFormList{{ pf.id }}" class="ekey-btn ekey-btn-small">Speichern</button>
-                    <button type="submit" form="proofDeleteFormList{{ pf.id }}" class="ekey-btn ekey-btn-small"
-                            onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
+                    <div class="ekey-actions-row">
+                        <a href="{{ url_for('gui.audit_plan', programmFilter=programm_filter, checklistePlan=pl.id, proofEdit=pf.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                        <form method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}" style="display:inline">
+                            <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+                            <button type="submit" class="ekey-btn ekey-btn-small" onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
+        {% else %}
+            <tr><td colspan="5">Keine Proofs vorhanden.</td></tr>
         {% endfor %}
         </tbody>
     </table>
-    {% endif %}
+</div>
+</div>
+</div>
 
-    <hr class="ekey-form-hr">
-    <h4 class="ekey-group-heading">Neuen Proof manuell hinzufuegen</h4>
+<div id="modalNeuerProofPlan{{ pl.id }}" class="ekey-modal-overlay">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Proof manuell hinzufuegen - Plan #{{ pl.id }}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalNeuerProofPlan{{ pl.id }}')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
     <form method="post" action="{{ url_for('gui.audit_plan_proof_add', plan_id=pl.id) }}">
         <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-        <input type="hidden" name="source" value="list">
         <div class="ekey-form-grid">
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofFrageList{{ pl.id }}">Frage</label>
-                <input type="text" id="newProofFrageList{{ pl.id }}" name="auditFrage" required>
-            </div>
             <div class="ekey-form-row">
-                <label for="newProofNormList{{ pl.id }}">Norm-Kapitel</label>
-                <input type="text" id="newProofNormList{{ pl.id }}" name="normKapitel">
+                <label for="newProofReihenfolge{{ pl.id }}">Reihenfolge</label>
+                <input type="number" id="newProofReihenfolge{{ pl.id }}" name="reihenfolge" value="{{ next_reihenfolge_by_plan.get(pl.id, 1) }}">
+                <span class="ekey-hint">Vorhandene Proofs ab dieser Position ruecken automatisch um 1 nach hinten.</span>
             </div>
+            {{ rt.richtext_field('auditFrage', 'Frage') }}
             <div class="ekey-form-row">
-                <label for="newProofPunkteList{{ pl.id }}">Punkte</label>
-                <input type="number" id="newProofPunkteList{{ pl.id }}" name="punkte">
+                <label for="newProofNorm{{ pl.id }}">Norm-Kapitel</label>
+                <input type="text" id="newProofNorm{{ pl.id }}" name="normKapitel">
             </div>
-            <div class="ekey-form-row">
-                <label for="newProofAuditorList{{ pl.id }}">Auditor</label>
-                <input type="text" id="newProofAuditorList{{ pl.id }}" name="auditor">
-            </div>
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofBewertungList{{ pl.id }}">Bewertung</label>
-                <textarea id="newProofBewertungList{{ pl.id }}" name="bewertung" rows="2"></textarea>
-            </div>
-            <div class="ekey-form-row ekey-form-row-wide">
-                <label for="newProofBeispielList{{ pl.id }}">Beispiel</label>
-                <textarea id="newProofBeispielList{{ pl.id }}" name="beispiel" rows="2"></textarea>
-            </div>
+            {{ rt.richtext_field('auditResultInfo', 'Info') }}
         </div>
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Proof hinzufuegen</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalNeuerProofPlan{{ pl.id }}')">Abbrechen</button>
         </div>
     </form>
 </div>
 </div>
 </div>
+
+{% for pf in proofs_by_plan.get(pl.id, []) %}
+<div id="modalProofBearbeitenPlan{{ pl.id }}_{{ pf.id }}" class="ekey-modal-overlay{% if edit_proof and edit_proof.id|string == pf.id|string %} ekey-modal-open{% endif %}">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Proof aendern - Plan #{{ pl.id }}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalProofBearbeitenPlan{{ pl.id }}_{{ pf.id }}')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <form method="post" action="{{ url_for('gui.audit_plan_proof_update', proof_id=pf.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row">
+                <label for="editProofReihenfolge{{ pf.id }}">Reihenfolge</label>
+                <input type="number" id="editProofReihenfolge{{ pf.id }}" name="reihenfolge" value="{{ pf.reihenfolge }}">
+            </div>
+            {{ rt.richtext_field('auditFrage', 'Frage', pf.auditFrage or '') }}
+            <div class="ekey-form-row">
+                <label for="editProofNorm{{ pf.id }}">Norm-Kapitel</label>
+                <input type="text" id="editProofNorm{{ pf.id }}" name="normKapitel" value="{{ pf.normKapitel or '' }}">
+            </div>
+            {{ rt.richtext_field('auditResultInfo', 'Info', pf.auditResultInfo or '') }}
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
+            <a href="{{ url_for('gui.audit_plan', programmFilter=programm_filter, checklistePlan=pl.id) }}" class="ekey-btn">Abbrechen</a>
+        </div>
+    </form>
+</div>
+</div>
+</div>
+{% endfor %}
 {% endfor %}
 
 <div id="modalConfirmDeletePlan" class="ekey-modal-overlay">
