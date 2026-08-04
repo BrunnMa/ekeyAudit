@@ -486,13 +486,18 @@ def audit_durchfuehren_detail(plan_id):
     # alle Proofs dieses Plans vorab geladen, damit das PopUp "Proof bearbeiten" direkt auf
     # dieser Seite angezeigt werden kann (keine eigene Seite mehr noetig).
     results_by_proof = {}
+    result_by_proof = {}
     links_by_proof = {}
     anhaenge_by_proof = {}
     interviews_by_proof = {}
     abweichungen_by_result = {}
+    massnahmen_by_abweichung = {}
     for pf in proofs:
         results = db.list_results_for_proof(pf["id"])
         results_by_proof[pf["id"]] = results
+        # Pro Proof ist nur eine Bewertung vorgesehen (siehe db.add_audit_result) - beim
+        # erneuten Oeffnen von [Bearbeiten] wird das PopUp damit vorbefuellt.
+        result_by_proof[pf["id"]] = results[0] if results else None
         links_by_proof[pf["id"]] = db.list_links(pf["id"])
         anhaenge_by_proof[pf["id"]] = db.list_anhaenge(pf["id"])
         interviews_by_proof[pf["id"]] = db.query(
@@ -502,8 +507,15 @@ def audit_durchfuehren_detail(plan_id):
             abweichungen_by_result[r["id"]] = db.query(
                 "SELECT * FROM STG_QM_AuditAbweichung WHERE auditResultID = ? ORDER BY id DESC", (r["id"],)
             )
+            # Massnahmen werden je Abweichung angezeigt (Spalte "Massnahmen" + eigenes PopUp
+            # "Massnahmen" pro Abweichung) - deshalb hier nach abweichungId gruppiert statt nur
+            # nach Ergebnis.
+            for m in db.list_massnahmen_for_result(r["id"]):
+                massnahmen_by_abweichung.setdefault(m["abweichungId"], []).append(m)
 
     proof_open_id = request.args.get("proofOpen")
+    abweichungen_open_id = request.args.get("abweichungenOpen")
+    massnahmen_abweichung_open_id = request.args.get("massnahmenAbweichungOpen")
     return render_template(
         "audit_durchfuehren.html",
         plan=plan,
@@ -511,11 +523,16 @@ def audit_durchfuehren_detail(plan_id):
         bewertungen=db.get_lookup("Look_QM_AuditBewertung"),
         mitarbeiter=db.list_mitarbeiter(),
         results_by_proof=results_by_proof,
+        result_by_proof=result_by_proof,
         links_by_proof=links_by_proof,
         anhaenge_by_proof=anhaenge_by_proof,
         interviews_by_proof=interviews_by_proof,
         abweichungen_by_result=abweichungen_by_result,
+        massnahmen_by_abweichung=massnahmen_by_abweichung,
+        massnahmen_status=db.get_lookup("Look_QM_MassnahmenStatus"),
         proof_open_id=proof_open_id,
+        abweichungen_open_id=abweichungen_open_id,
+        massnahmen_abweichung_open_id=massnahmen_abweichung_open_id,
         heute=datetime.now().strftime("%Y-%m-%d"),
         detail_mode=True,
     )
@@ -534,8 +551,8 @@ def audit_result_add(proof_id):
     except ValueError:
         punkte = None
     datum = request.form.get("datumerfasst") or datetime.now().strftime("%Y-%m-%d")
-    info = request.form.get("auditResultInfo", "")
-    db.add_audit_result(proof_id, "; ".join(auditoren), datum, info, punkte)
+    antwort = request.form.get("antwortZurFrage", "")
+    db.add_audit_result(proof_id, "; ".join(auditoren), datum, antwort, punkte)
     flash("Ergebnis erfasst.", "success")
     return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
@@ -600,18 +617,87 @@ def audit_result_abweichung_add(result_id):
 
     if abweichung_text and eigner:
         name_auditor = result.get("nameAuditor") or ""
-        ab_id = db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner)
-        massnahme_text = request.form.get("massnahme", "").strip()
-        if massnahme_text:
-            datum_massnahme = request.form.get("datumMassnahme") or datum
-            massnahme_eigner = request.form.get("massnahmeEigner") or eigner
-            db.add_massnahme(ab_id, massnahme_text, datum_massnahme, massnahme_eigner)
+        db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner)
         flash("Abweichung erfasst.", "success")
     else:
         flash("Bitte Abweichungstext und Eigner angeben.", "error")
 
     return redirect(url_for(
-        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof["id"]
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"],
+    ))
+
+
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/massnahme/add", methods=["POST"])
+@security.login_required
+def audit_durchfuehren_massnahme_add(proof_id):
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+
+    abweichung_id = request.form.get("auditAbweichungID")
+    massnahme_text = request.form.get("massnahme", "").strip()
+    datum = request.form.get("datumMassnahme") or datetime.now().strftime("%Y-%m-%d")
+    eigner = request.form.get("massnahmeEigner", "").strip()
+
+    if abweichung_id and massnahme_text and eigner:
+        db.add_massnahme(abweichung_id, massnahme_text, datum, eigner)
+        flash("Massnahme erfasst.", "success")
+    else:
+        flash("Bitte Abweichung, Massnahme und Eigner angeben.", "error")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung_id,
+    ))
+
+
+@gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/status/update", methods=["POST"])
+@security.login_required
+def audit_massnahme_status_update(massnahme_id):
+    massnahme = db.get_massnahme(massnahme_id)
+    if not massnahme:
+        abort(404)
+    abweichung = db.get_abweichung(massnahme["auditAbweichungID"])
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    status_id = request.form.get("statusMassnahmeID")
+    if status_id:
+        db.update_massnahme_status(massnahme_id, status_id)
+        flash("Status der Massnahme aktualisiert.", "success")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
+    ))
+
+
+@gui.route("/audit-durchfuehren/abweichung/<int:abweichung_id>/delete", methods=["POST"])
+@security.login_required
+def audit_abweichung_delete(abweichung_id):
+    abweichung = db.get_abweichung(abweichung_id)
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    db.delete_abweichung(abweichung_id)
+    flash("Abweichung geloescht.", "success")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"],
     ))
 
 
@@ -807,12 +893,20 @@ def governance_checkliste_delete(checkliste_id):
 @security.login_required
 def abweichungen():
     status_filter = request.args.get("status")
-    liste = db.list_abweichungen(status_filter)
+    programm_filter = request.args.get("programmId")
+    liste = db.list_abweichungen(status_filter, programm_filter)
     return render_template(
         "abweichungen.html",
         abweichungen=liste,
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
         status_filter=status_filter,
+        programme=db.list_audit_programme(),
+        programm_filter=programm_filter,
+        kpis={
+            "abweichungen_gesamt": kpi.anzahl_abweichungen_gesamt(),
+            "massnahmen_gesamt": kpi.anzahl_massnahmen_gesamt(),
+            "erfuellungsgrad_massnahmen": kpi.erfuellungsgrad_massnahmen(),
+        },
     )
 
 

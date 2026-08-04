@@ -1,6 +1,42 @@
 // ekeyAudit - app.js
 // Kleines JS fuer Sidebar-Toggle (einklappbar), kein Framework.
 
+// ---------------------------------------------------------------------
+// Ladeanzeige fuer Seiten, deren Aufruf spuerbar dauert (z.B. "Audit
+// durchfuehren - Plan", da dort je Proof mehrere Datenbankabfragen noetig
+// sind). Wird vor dem eigentlichen Seitenwechsel per onclick eingeblendet
+// und bleibt bis zum Laden der naechsten Seite sichtbar.
+// ---------------------------------------------------------------------
+
+function ekeyShowLoadingOverlay() {
+    var overlay = document.getElementById("ekeyLoadingOverlay");
+    if (overlay) overlay.classList.add("ekey-loading-visible");
+}
+
+// Automatisch bei JEDEM Speichervorgang (Formular-Absenden) die Ladeanzeige
+// einblenden - unabhaengig davon, um welches Formular/welche Seite es sich
+// handelt. Der eigentliche Seitenwechsel (Redirect nach dem Speichern) laedt
+// danach ganz normal eine neue Seite, wodurch die Anzeige automatisch wieder
+// verschwindet.
+document.addEventListener("submit", function (e) {
+    if (e.target && e.target.tagName === "FORM") {
+        ekeyShowLoadingOverlay();
+    }
+});
+
+// Automatisch bei JEDEM Ladevorgang (Klick auf einen Link, der auf eine
+// andere/dieselbe Seite dieser Anwendung navigiert) die Ladeanzeige
+// einblenden. Links, die in einem neuen Tab oeffnen (target="_blank") oder
+// keine echte Seitennavigation ausloesen (mailto:/tel:), werden bewusst
+// ausgenommen.
+document.addEventListener("click", function (e) {
+    var link = e.target.closest("a[href]");
+    if (!link || link.target === "_blank") return;
+    var href = link.getAttribute("href") || "";
+    if (href.indexOf("mailto:") === 0 || href.indexOf("tel:") === 0 || href.indexOf("#") === 0) return;
+    ekeyShowLoadingOverlay();
+});
+
 document.addEventListener("DOMContentLoaded", function () {
     var toggleBtn = document.getElementById("sidebarToggle");
     var sidebar = document.getElementById("ekeySidebar");
@@ -123,7 +159,10 @@ function ekeyOpenAuditprogramm() {
     var form = document.getElementById("homeAuditprogrammForm");
     var select = document.getElementById("homeAuditprogrammSelect");
     if (!form || !select || !select.value) return;
-    window.location.href = form.getAttribute("data-base-url") + "?edit=" + encodeURIComponent(select.value);
+    // Bewusst OHNE "?edit=..." navigieren: von der Startseite aus soll nur die Seite
+    // "Auditprogramm erstellen" geoeffnet werden, nicht automatisch das PopUp zum Aendern
+    // (das PopUp oeffnet weiterhin gezielt ueber den Button [Bearbeiten] in der Programmliste).
+    window.location.href = form.getAttribute("data-base-url");
 }
 
 // ---------------------------------------------------------------------

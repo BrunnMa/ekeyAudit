@@ -35,11 +35,21 @@
         <div class="ekey-index-info-panel">
             <h2 class="ekey-h2">AuditProofs</h2>
             <p>Anzahl AuditProofs gesamt: <strong>{{ kpis.proofs_gesamt }}</strong></p>
+            <p>Mittelwert Punkte: <strong>{{ kpis.mittelwert_punkte }}</strong></p>
+            <p>Erfuellungsgrad: <strong>{{ kpis.erfuellungsgrad }}%</strong></p>
         </div>
         <div class="ekey-index-info-panel">
             <h2 class="ekey-h2">Auditabweichungen</h2>
             <p>Anzahl Auditabweichungen gesamt: <strong>{{ kpis.abweichungen_gesamt }}</strong></p>
             <p>Davon offen: <strong>{{ kpis.abweichungen_offen }}</strong></p>
+        </div>
+        <div class="ekey-index-info-panel">
+            <h2 class="ekey-h2">Massnahmen nach Status</h2>
+            <p>Anzahl Massnahmen gesamt: <strong>{{ kpis.massnahmen_gesamt }}</strong></p>
+            <p>Davon offen: <strong>{{ kpis.massnahmen_offen }}</strong></p>
+            <p>Davon geplant: <strong>{{ kpis.massnahmen_geplant }}</strong></p>
+            <p>Davon fertig: <strong>{{ kpis.massnahmen_fertig }}</strong></p>
+            <p>Davon wirksam: <strong>{{ kpis.massnahmen_wirksam }}</strong></p>
         </div>
     </div>
 </div>

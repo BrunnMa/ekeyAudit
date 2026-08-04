@@ -95,14 +95,65 @@ def anzahl_auditproofs_gesamt():
     return row["c"] if row else 0
 
 
+def mittelwert_punkte():
+    """Mittelwert Punkte = Summe aller erfassten Punktbewertungen (STG_QM_AuditResult.punkte,
+    Skala 1-4) / Anzahl aller Punktbewertungen - Kennzahl 'AuditProofs' auf der Startseite."""
+    row = db.query(
+        "SELECT SUM(punkte) AS summe, COUNT(punkte) AS anzahl FROM STG_QM_AuditResult WHERE punkte IS NOT NULL",
+        fetchone=True
+    )
+    if not row or not row["anzahl"]:
+        return 0.0
+    return row["summe"] / row["anzahl"]
+
+
+def erfuellungsgrad():
+    """Erfuellungsgrad in Prozent = 100 * Mittelwert Punkte / 4 (Punkteskala 1-4)."""
+    return round(100 * mittelwert_punkte() / 4, 1)
+
+
+def anzahl_massnahmen_gesamt():
+    row = db.query("SELECT COUNT(*) AS c FROM STG_QM_AuditMassnahme", fetchone=True)
+    return row["c"] if row else 0
+
+
+def anzahl_massnahmen_nach_status(status_id):
+    """Anzahl Massnahmen mit einem bestimmten Status (Look_QM_MassnahmenStatus:
+    1=offen, 2=geplant, 3=fertig, 4=wirksam)."""
+    row = db.query(
+        "SELECT COUNT(*) AS c FROM STG_QM_AuditMassnahme WHERE statusMassnahmeID = ?",
+        (status_id,), fetchone=True
+    )
+    return row["c"] if row else 0
+
+
+def erfuellungsgrad_massnahmen():
+    """Erfuellungsgrad Massnahmen in Prozent: Anteil der Massnahmen mit Status 'wirksam' (4,
+    siehe Look_QM_MassnahmenStatus) an allen erfassten Massnahmen - Kennzahl auf der Seite
+    'Auditabweichungen'."""
+    gesamt = anzahl_massnahmen_gesamt()
+    if not gesamt:
+        return 0.0
+    wirksam = anzahl_massnahmen_nach_status(4)
+    return round(100 * wirksam / gesamt, 1)
+
+
 def audithome_kpis():
-    """Kennzahlen fuer die Startseite AuditHome (Auditprogramme / AuditProofs / Auditabweichungen)."""
+    """Kennzahlen fuer die Startseite AuditHome (Auditprogramme / AuditProofs /
+    Auditabweichungen / Massnahmen)."""
     return {
         "programme_gesamt": anzahl_audit_programme(),
         "programme_offen": offene_audit_programme_gesamt(),
         "proofs_gesamt": anzahl_auditproofs_gesamt(),
+        "mittelwert_punkte": round(mittelwert_punkte(), 2),
+        "erfuellungsgrad": erfuellungsgrad(),
         "abweichungen_gesamt": anzahl_abweichungen_gesamt(),
         "abweichungen_offen": offene_abweichungen_gesamt(),
+        "massnahmen_gesamt": anzahl_massnahmen_gesamt(),
+        "massnahmen_offen": anzahl_massnahmen_nach_status(1),
+        "massnahmen_geplant": anzahl_massnahmen_nach_status(2),
+        "massnahmen_fertig": anzahl_massnahmen_nach_status(3),
+        "massnahmen_wirksam": anzahl_massnahmen_nach_status(4),
     }
 
 

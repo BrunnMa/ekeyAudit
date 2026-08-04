@@ -4,8 +4,21 @@
 <h1 class="ekey-h1">Auditabweichungen</h1>
 
 <div class="ekey-panel">
+    <h2 class="ekey-h2">Kennzahlen</h2>
+    <p>Anzahl Abweichungen: <strong>{{ kpis.abweichungen_gesamt }}</strong></p>
+    <p>Anzahl Massnahmen: <strong>{{ kpis.massnahmen_gesamt }}</strong></p>
+    <p>Erfuellungsgrad Massnahmen: <strong>{{ kpis.erfuellungsgrad_massnahmen }}%</strong></p>
+</div>
+
+<div class="ekey-panel">
     <h2 class="ekey-h2">Filter</h2>
     <form method="get" action="{{ url_for('gui.abweichungen') }}" class="ekey-inline-form">
+        <select name="programmId" onchange="this.form.submit()">
+            <option value="">Alle Auditprogramme</option>
+            {% for p in programme %}
+            <option value="{{ p.id }}" {% if programm_filter and programm_filter|string == p.id|string %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }}</option>
+            {% endfor %}
+        </select>
         <select name="status" onchange="this.form.submit()">
             <option value="">Alle Status</option>
             {% for s in audit_status %}

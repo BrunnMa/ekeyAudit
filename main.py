@@ -103,3 +103,7 @@ if __name__ == "__main__":
     print("Login: admin / ekey2026 (nur falls Authentifizierung in den Einstellungen aktiviert ist)")
     _maybe_autostart_browser()
     app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)
+
+###########################################################################################
+## EOF  
+###########################################################################################

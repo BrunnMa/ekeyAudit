@@ -34,13 +34,7 @@
             <li><a href="{{ url_for('gui.index') }}">AuditHome</a></li>
             <li><a href="{{ url_for('gui.audit_programm') }}">Auditprogramm erstellen</a></li>
             <li><a href="{{ url_for('gui.audit_plan') }}">Audit planen</a></li>
-            <li>
-                <a href="{{ url_for('gui.audit_durchfuehren') }}">Audit durchfuehren</a>
-                <ul class="ekey-subnav">
-                    <li><a href="{{ url_for('gui.audit_durchfuehren') }}">Laufende Audits</a></li>
-                    <li><a href="{{ url_for('gui.audit_interviews') }}">Interviews</a></li>
-                </ul>
-            </li>
+            <li><a href="{{ url_for('gui.audit_durchfuehren') }}">Audit durchfuehren</a></li>
             <li>
                 <a href="{{ url_for('gui.governance_prozesse') }}">Audit governance</a>
                 <ul class="ekey-subnav">
@@ -51,9 +45,6 @@
             </li>
             <li>
                 <a href="{{ url_for('gui.abweichungen') }}">Auditabweichungen</a>
-                <ul class="ekey-subnav">
-                    <li><a href="{{ url_for('gui.massnahmen') }}">Massnahmen</a></li>
-                </ul>
             </li>
             <li><a href="{{ url_for('gui.konfiguration') }}">Konfiguration</a></li>
             <li><a href="{{ url_for('gui.einstellungen') }}">Einstellungen</a></li>
@@ -93,6 +84,11 @@
 <footer class="ekey-footer">
     <a href="https://www.ekey.net" target="_blank" rel="noopener">www.ekey.net</a>
 </footer>
+
+<div id="ekeyLoadingOverlay" class="ekey-loading-overlay">
+    <div class="ekey-spinner"></div>
+    <div class="ekey-loading-text">Wird geladen...</div>
+</div>
 
 <script src="{{ url_for('gui.static', filename='js/app.js') }}"></script>
 </body>

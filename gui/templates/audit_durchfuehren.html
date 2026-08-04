@@ -3,20 +3,36 @@
 {% import "_macros_richtext.html" as rt %}
 {% block content %}
 
+{% set punkte_farben = {
+    '1': '#B00020',
+    '2': '#FF9800',
+    '3': '#8BC34A',
+    '4': '#43A047'
+} %}
+
 {% if detail_mode %}
     <h1 class="ekey-h1">Audit durchfuehren - Plan #{{ plan.id }}</h1>
     <p class="ekey-muted">Fachbereich: {{ plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
 
     <div class="ekey-panel">
+        <div class="ekey-form-actions" style="justify-content: flex-end; margin-bottom: 8px;">
+            <a href="{{ url_for('gui.audit_durchfuehren', programmId=plan.auditProgrammId) }}" class="ekey-btn">Zurueck zur Uebersicht</a>
+        </div>
         <h2 class="ekey-h2">Proofs</h2>
         <table class="ekey-table">
-            <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Letzte Bewertung</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Bewertung</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for pf in proofs %}
                 <tr>
                     <td class="ekey-richtext-display">{{ pf.auditFrage | safe }}</td>
                     <td>{{ pf.normKapitel }}</td>
-                    <td>{{ pf.letzteBewertung or '-' }}</td>
+                    <td>
+                        {% if pf.letztePunkte is not none %}
+                        <span style="color: {{ punkte_farben.get(pf.letztePunkte|string, '') }}; font-size: 14px; font-weight: bold;">{{ pf.letztePunkte }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
                     <td><button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalProof{{ pf.id }}')">Bearbeiten</button></td>
                 </tr>
             {% else %}
@@ -25,17 +41,17 @@
             </tbody>
         </table>
     </div>
-    <a href="{{ url_for('gui.audit_durchfuehren') }}" class="ekey-btn">Zurueck zur Uebersicht</a>
 
     {% for pf in proofs %}
     {% set results = results_by_proof.get(pf.id, []) %}
+    {% set result = result_by_proof.get(pf.id) %}
     {% set links = links_by_proof.get(pf.id, []) %}
     {% set anhaenge = anhaenge_by_proof.get(pf.id, []) %}
     {% set interviews = interviews_by_proof.get(pf.id, []) %}
     <div id="modalProof{{ pf.id }}" class="ekey-modal-overlay{% if proof_open_id and proof_open_id|string == pf.id|string %} ekey-modal-open{% endif %}">
     <div class="ekey-modal" style="max-width: 900px;">
     <div class="ekey-modal-header">
-        <h2>Proof bearbeiten - Plan #{{ plan.id }}</h2>
+        <h2>Proof - Plan #{{ plan.id }} - Frage #{{ pf.id }}</h2>
         <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalProof{{ pf.id }}')" title="Schliessen">&times;</button>
     </div>
     <div class="ekey-modal-body">
@@ -49,38 +65,56 @@
         <div class="ekey-panel">
             <h2 class="ekey-h2">Ergebnis erfassen</h2>
             <form method="post" action="{{ url_for('gui.audit_result_add', proof_id=pf.id) }}">
-                <div class="ekey-form-row" style="margin-bottom: 10px;">
-                    <label>Auditor(en)</label>
-                    <div id="auditorRowsResult{{ pf.id }}">
-                        <div class="ekey-auditor-row">
-                            <input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off"
-                                   placeholder="Namen eingeben zum Suchen...">
-                            <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this, 'auditorRowsResult{{ pf.id }}')">Entfernen</button>
+                {% set ns_punkte_farbe = namespace(farbe='') %}
+                {% if result and result.punkte %}{% set ns_punkte_farbe.farbe = punkte_farben.get(result.punkte|string, '') %}{% endif %}
+                <div class="ekey-form-grid">
+                    {{ rt.richtext_field('antwortZurFrage', 'Antwort zur Frage', result.antwortZurFrage if result else '') }}
+                    <div class="ekey-form-row">
+                        <label>Auditor(en)</label>
+                        <div id="auditorRowsResult{{ pf.id }}">
+                            {% if result and result.nameAuditor %}
+                                {% for a in result.nameAuditor.split(';') %}
+                                <div class="ekey-auditor-row">
+                                    <input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off"
+                                           placeholder="Namen eingeben zum Suchen..." value="{{ a.strip() }}">
+                                    <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this, 'auditorRowsResult{{ pf.id }}')">Entfernen</button>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="ekey-auditor-row">
+                                    <input type="text" name="auditor_liste" list="mitarbeiter_liste" autocomplete="off"
+                                           placeholder="Namen eingeben zum Suchen...">
+                                    <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyRemoveAuditorRow(this, 'auditorRowsResult{{ pf.id }}')">Entfernen</button>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="ekey-form-actions">
+                            <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyAddAuditorRow('auditorRowsResult{{ pf.id }}')">+ Auditor hinzufuegen</button>
                         </div>
                     </div>
-                    <div class="ekey-form-actions">
-                        <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyAddAuditorRow('auditorRowsResult{{ pf.id }}')">+ Auditor hinzufuegen</button>
-                    </div>
-                </div>
-                <div class="ekey-form-grid">
                     <div class="ekey-form-row">
                         <label for="punkte{{ pf.id }}">Punkte</label>
-                        <select id="punkte{{ pf.id }}" name="punkte">
-                            <option value="">-- waehlen --</option>
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <select id="punkte{{ pf.id }}" name="punkte"
+                                    onchange="this.style.color = this.options[this.selectedIndex].style.color;"
+                                    style="font-size: 14px; font-weight: bold; color: {{ ns_punkte_farbe.farbe }};">
+                                <option value="">-- waehlen --</option>
+                                <option value="1" style="color: {{ punkte_farben['1'] }};" {% if result and result.punkte|string == '1' %}selected{% endif %}>1</option>
+                                <option value="2" style="color: {{ punkte_farben['2'] }};" {% if result and result.punkte|string == '2' %}selected{% endif %}>2</option>
+                                <option value="3" style="color: {{ punkte_farben['3'] }};" {% if result and result.punkte|string == '3' %}selected{% endif %}>3</option>
+                                <option value="4" style="color: {{ punkte_farben['4'] }};" {% if result and result.punkte|string == '4' %}selected{% endif %}>4</option>
+                            </select>
+                            <span class="ekey-info-icon" title="1 = nicht erfuellt&#10;2 = wenig erfuellt&#10;3 = ueberwiegend erfuellt&#10;4 = erfuellt">&#9432;</span>
+                        </div>
                     </div>
                     <div class="ekey-form-row">
                         <label for="datumerfasst{{ pf.id }}">Datum</label>
-                        <input type="date" id="datumerfasst{{ pf.id }}" name="datumerfasst" value="{{ heute }}">
+                        <input type="date" id="datumerfasst{{ pf.id }}" name="datumerfasst" value="{{ result.datumerfasst if result else heute }}">
                     </div>
-                    {{ rt.richtext_field('auditResultInfo', 'Info (zur Bewertung)') }}
                 </div>
-                <div class="ekey-form-actions">
-                    <button type="submit" class="ekey-btn ekey-btn-primary">Ergebnis speichern</button>
+                <div class="ekey-form-actions" style="justify-content: space-between;">
+                    <button type="submit" class="ekey-btn ekey-btn-primary" onclick="ekeyShowLoadingOverlay()">Ergebnis speichern</button>
+                    <button type="button" class="ekey-btn" onclick="ekeyOpenModal('modalAbweichungen{{ pf.id }}')">Abweichung erfassen</button>
                 </div>
             </form>
         </div>
@@ -118,7 +152,6 @@
 
         <div class="ekey-form-actions">
             <button type="button" class="ekey-btn" onclick="ekeyOpenModal('modalInterview{{ pf.id }}')">Interview</button>
-            <button type="button" class="ekey-btn" disabled title="Funktion folgt in Kuerze">Abweichung erfassen</button>
             <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalProof{{ pf.id }}')">Zurueck zum Audit-Plan</button>
         </div>
     </div>
@@ -161,6 +194,138 @@
     </div>
     </div>
     </div>
+
+    <div id="modalAbweichungen{{ pf.id }}" class="ekey-modal-overlay{% if abweichungen_open_id and abweichungen_open_id|string == pf.id|string %} ekey-modal-open{% endif %}">
+    <div class="ekey-modal" style="max-width: 800px;">
+    <div class="ekey-modal-header">
+        <h2>Abweichung - Plan #{{ plan.id }} -&gt; Frage #{{ pf.id }} hinzufuegen</h2>
+        <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalAbweichungen{{ pf.id }}')" title="Schliessen">&times;</button>
+    </div>
+    <div class="ekey-modal-body">
+        {% if not result %}
+        <p class="ekey-hint">Bitte zuerst das Ergebnis (Auditor/Punkte/Datum/Antwort) speichern, bevor eine Abweichung erfasst werden kann.</p>
+        {% else %}
+        {% set proof_abweichungen = abweichungen_by_result.get(result.id, []) %}
+        <p class="ekey-muted">Aktuelle Bewertung: {{ result.bewertungName or '-' }}</p>
+
+        <h4 class="ekey-group-heading">Neue Abweichung erfassen</h4>
+        <form method="post" action="{{ url_for('gui.audit_result_abweichung_add', result_id=result.id) }}">
+            <div class="ekey-form-grid">
+                <div class="ekey-form-row">
+                    <label for="auditBewertungID{{ pf.id }}">Bewertung</label>
+                    <select id="auditBewertungID{{ pf.id }}" name="auditBewertungID" required>
+                        {% for b in bewertungen %}
+                        <option value="{{ b.id }}" {% if result.auditBewertungID|string == b.id|string %}selected{% endif %}>{{ b.auditResult }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="datumErfasst{{ pf.id }}">Datum</label>
+                    <input type="date" id="datumErfasst{{ pf.id }}" name="datumErfasst" value="{{ heute }}">
+                </div>
+                <div class="ekey-form-row ekey-form-row-wide">
+                    <label for="abweichung{{ pf.id }}">Abweichungstext</label>
+                    <textarea id="abweichung{{ pf.id }}" name="abweichung" rows="2"></textarea>
+                </div>
+                <div class="ekey-form-row">
+                    <label for="nameEigner{{ pf.id }}">Eigner der Abweichung</label>
+                    <input type="text" id="nameEigner{{ pf.id }}" name="nameEigner">
+                </div>
+            </div>
+            <div class="ekey-form-actions">
+                <button type="submit" class="ekey-btn ekey-btn-primary">Abweichung erfassen</button>
+                <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalAbweichungen{{ pf.id }}')">Schliessen</button>
+            </div>
+        </form>
+
+        <hr class="ekey-form-hr">
+        <h4 class="ekey-group-heading">Abweichungen</h4>
+        <table class="ekey-table">
+            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Erfasst am</th><th>Massnahmen</th><th>Aktion</th></tr></thead>
+            <tbody>
+            {% for a in proof_abweichungen %}
+                <tr>
+                    <td>{{ a.abweichung }}</td>
+                    <td>{{ a.nameEigner }}</td>
+                    <td>{{ a.datumErfasst }}</td>
+                    <td>{{ massnahmen_by_abweichung.get(a.id, [])|length }}</td>
+                    <td>
+                        <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalMassnahmenAbweichung{{ a.id }}')">Massnahmen</button>
+                        <form method="post" action="{{ url_for('gui.audit_abweichung_delete', abweichung_id=a.id) }}" style="display:inline;">
+                            <button type="submit" class="ekey-btn ekey-btn-small" onclick="return confirm('Abweichung und alle zugehoerigen Massnahmen wirklich loeschen?');">Loeschen</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">Noch keine Abweichung erfasst.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {% for a in proof_abweichungen %}
+        <div id="modalMassnahmenAbweichung{{ a.id }}" class="ekey-modal-overlay{% if massnahmen_abweichung_open_id and massnahmen_abweichung_open_id|string == a.id|string %} ekey-modal-open{% endif %}">
+        <div class="ekey-modal">
+        <div class="ekey-modal-header">
+            <h2>Massnahmen - Plan #{{ plan.id }} -&gt; Frage #{{ pf.id }} -&gt; Abweichung #{{ a.id }}</h2>
+            <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalMassnahmenAbweichung{{ a.id }}')" title="Schliessen">&times;</button>
+        </div>
+        <div class="ekey-modal-body">
+            <p class="ekey-muted">Abweichung: {{ a.abweichung }}</p>
+            <form method="post" action="{{ url_for('gui.audit_durchfuehren_massnahme_add', proof_id=pf.id) }}">
+                <input type="hidden" name="auditAbweichungID" value="{{ a.id }}">
+                <div class="ekey-form-grid">
+                    <div class="ekey-form-row ekey-form-row-wide">
+                        <label for="massnahmeText{{ a.id }}">Massnahme</label>
+                        <textarea id="massnahmeText{{ a.id }}" name="massnahme" rows="2"></textarea>
+                    </div>
+                    <div class="ekey-form-row">
+                        <label for="datumMassnahme{{ a.id }}">Termin Massnahme</label>
+                        <input type="date" id="datumMassnahme{{ a.id }}" name="datumMassnahme">
+                    </div>
+                    <div class="ekey-form-row">
+                        <label for="massnahmeEigner{{ a.id }}">Eigner Massnahme</label>
+                        <input type="text" id="massnahmeEigner{{ a.id }}" name="massnahmeEigner">
+                    </div>
+                </div>
+                <div class="ekey-form-actions">
+                    <button type="submit" class="ekey-btn ekey-btn-primary">Massnahme speichern</button>
+                    <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalMassnahmenAbweichung{{ a.id }}')">Schliessen</button>
+                </div>
+            </form>
+
+            <hr class="ekey-form-hr">
+            <h4 class="ekey-group-heading">Erfasste Massnahmen</h4>
+            <table class="ekey-table">
+                <thead><tr><th>Massnahme</th><th>Eigner</th><th>Termin</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for m in massnahmen_by_abweichung.get(a.id, []) %}
+                    <tr>
+                        <td>{{ m.massnahme }}</td>
+                        <td>{{ m.nameEigner }}</td>
+                        <td>{{ m.datumMassnahme }}</td>
+                        <td>
+                            <form method="post" action="{{ url_for('gui.audit_massnahme_status_update', massnahme_id=m.id) }}" style="display:inline;">
+                                <select name="statusMassnahmeID" onchange="this.form.submit()">
+                                    {% for s in massnahmen_status %}
+                                    <option value="{{ s.id }}" {% if m.statusMassnahmeID|string == s.id|string %}selected{% endif %}>{{ s.statusName }}</option>
+                                    {% endfor %}
+                                </select>
+                            </form>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="4">Noch keine Massnahme erfasst.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+    </div>
+    </div>
     {% endfor %}
 
     <datalist id="mitarbeiter_liste">
@@ -172,60 +337,58 @@
 {% else %}
     <h1 class="ekey-h1">Audit durchfuehren - laufende Audits</h1>
 
-    <div class="ekey-panel">
-        <h2 class="ekey-h2">Geplante laufende Audits</h2>
-        <p class="ekey-muted">Bitte ein aktives Auditprogramm waehlen, um dessen Auditplan-Eintraege anzuzeigen.</p>
-        <table class="ekey-table">
-            <thead><tr><th>Jahr</th><th>Typ</th><th>Unternehmen</th><th>Start</th><th>Ende</th><th>Aktion</th></tr></thead>
-            <tbody>
-            {% for p in programme_aktiv %}
-                <tr>
-                    <td>{{ p.auditJahr }}</td>
-                    <td>{{ p.auditTyp }}</td>
-                    <td>{{ p.unternehmen }}</td>
-                    <td>{{ p.startDatum }}</td>
-                    <td>{{ p.endDatum }}</td>
-                    <td>
-                        <a href="{{ url_for('gui.audit_durchfuehren', programmId=p.id) }}"
-                           class="ekey-btn ekey-btn-small {% if programm_id and programm_id|string == p.id|string %}ekey-btn-active{% endif %}">Waehlen</a>
-                    </td>
-                </tr>
-            {% else %}
-                <tr><td colspan="6">Keine aktiven Auditprogramme vorhanden. Bitte unter "Auditprogramm erstellen" ein Programm aktivieren.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <div class="ekey-grid-2">
+        <div class="ekey-panel">
+            <h2 class="ekey-h2">Geplante laufende Audits</h2>
+            <p class="ekey-muted">Bitte ein aktives Auditprogramm waehlen, um dessen Auditplan-Eintraege anzuzeigen.</p>
+            <table class="ekey-table">
+                <thead><tr><th>Jahr</th><th>Typ</th><th>Aktion</th></tr></thead>
+                <tbody>
+                {% for p in programme_aktiv %}
+                    <tr>
+                        <td>{{ p.auditJahr }}</td>
+                        <td>{{ p.auditTyp }}</td>
+                        <td>
+                            <a href="{{ url_for('gui.audit_durchfuehren', programmId=p.id) }}"
+                               class="ekey-btn ekey-btn-small {% if programm_id and programm_id|string == p.id|string %}ekey-btn-active{% endif %}">Waehlen</a>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="3">Keine aktiven Auditprogramme vorhanden. Bitte unter "Auditprogramm erstellen" ein Programm aktivieren.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-    <div class="ekey-panel">
-        <h2 class="ekey-h2">Alle Audit-Plaene{% if programm_id %} des gewaehlten Programms{% endif %}</h2>
-        {% if not programm_id %}
-        <p class="ekey-hint">Bitte zuerst oben ein aktives Auditprogramm waehlen.</p>
-        {% else %}
-        <p class="ekey-hint">Nur Eintraege, die nicht den Status "Entwurf" haben, koennen geoeffnet/bearbeitet werden.</p>
-        <table class="ekey-table">
-            <thead><tr><th>#</th><th>Fachbereich</th><th>Prozess</th><th>Status</th><th>Aktion</th></tr></thead>
-            <tbody>
-            {% for pl in plaene %}
-                <tr>
-                    <td>{{ pl.id }}</td>
-                    <td>{{ pl.fachbereichName }}</td>
-                    <td>{{ pl.prozessName }}</td>
-                    <td>{{ pl.statusName }}</td>
-                    <td>
-                        {% if entwurf_status_id and pl.auditStatus|string == entwurf_status_id|string %}
-                        <span class="ekey-muted">Entwurf - noch nicht bearbeitbar</span>
-                        {% else %}
-                        <a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small">Oeffnen</a>
-                        {% endif %}
-                    </td>
-                </tr>
+        <div class="ekey-panel">
+            <h2 class="ekey-h2">Alle Audit-Plaene{% if programm_id %} des gewaehlten Programms{% endif %}</h2>
+            {% if not programm_id %}
+            <p class="ekey-hint">Bitte zuerst oben ein aktives Auditprogramm waehlen.</p>
             {% else %}
-                <tr><td colspan="5">Keine Audit-Plaene fuer dieses Auditprogramm vorhanden.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        {% endif %}
+            <p class="ekey-hint">Nur Eintraege, die nicht den Status "Entwurf" haben, koennen geoeffnet/bearbeitet werden.</p>
+            <table class="ekey-table">
+                <thead><tr><th>Fachbereich</th><th>Prozess</th><th>Status</th><th>Aktion</th></tr></thead>
+                <tbody>
+                {% for pl in plaene %}
+                    <tr>
+                        <td>{{ pl.fachbereichName }}</td>
+                        <td>{{ pl.prozessName }}</td>
+                        <td>{{ pl.statusName }}</td>
+                        <td>
+                            {% if entwurf_status_id and pl.auditStatus|string == entwurf_status_id|string %}
+                            <span class="ekey-muted">Entwurf - noch nicht bearbeitbar</span>
+                            {% else %}
+                            <a href="{{ url_for('gui.audit_durchfuehren_detail', plan_id=pl.id) }}" class="ekey-btn ekey-btn-small" onclick="ekeyShowLoadingOverlay()">Oeffnen</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="4">Keine Audit-Plaene fuer dieses Auditprogramm vorhanden.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
     </div>
 {% endif %}
 {% endblock %}
