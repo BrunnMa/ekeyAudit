@@ -9,12 +9,36 @@
         <div class="ekey-kpi-label">Auditprogramme gesamt</div>
     </div>
     <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.programme_offen }}</div>
+        <div class="ekey-kpi-label">Auditprogramme offen</div>
+    </div>
+    <div class="ekey-kpi-tile">
         <div class="ekey-kpi-value">{{ kpis.anzahl_plaene }}</div>
         <div class="ekey-kpi-label">Audit-Plaene gesamt</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.proofs_gesamt }}</div>
+        <div class="ekey-kpi-label">AuditProofs gesamt</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.mittelwert_punkte }}</div>
+        <div class="ekey-kpi-label">Mittelwert Punkte</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.erfuellungsgrad }}%</div>
+        <div class="ekey-kpi-label">Erfuellungsgrad</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.abweichungen_gesamt }}</div>
+        <div class="ekey-kpi-label">Auditabweichungen gesamt</div>
     </div>
     <div class="ekey-kpi-tile ekey-kpi-tile-warn">
         <div class="ekey-kpi-value">{{ kpis.offene_abweichungen }}</div>
         <div class="ekey-kpi-label">Offene Abweichungen gesamt</div>
+    </div>
+    <div class="ekey-kpi-tile">
+        <div class="ekey-kpi-value">{{ kpis.massnahmen_gesamt }}</div>
+        <div class="ekey-kpi-label">Massnahmen gesamt</div>
     </div>
 </div>
 
@@ -35,14 +59,14 @@
 </div>
 
 <div class="ekey-panel">
-    <h2 class="ekey-h2">Offene Massnahmen nach Status</h2>
+    <h2 class="ekey-h2">Massnahmen nach Status</h2>
     <table class="ekey-table">
         <thead><tr><th>Status</th><th>Anzahl</th></tr></thead>
         <tbody>
-        {% for name, anzahl in kpis.offene_massnahmen_je_status.items() %}
-            <tr><td>{{ name }}</td><td>{{ anzahl }}</td></tr>
+        {% for row in kpis.massnahmen_je_status %}
+            <tr><td>{{ row.statusName }}</td><td>{{ row.anzahl }}</td></tr>
         {% else %}
-            <tr><td colspan="2">Keine offenen Massnahmen.</td></tr>
+            <tr><td colspan="2">Keine Massnahmen erfasst.</td></tr>
         {% endfor %}
         </tbody>
     </table>

@@ -26,15 +26,16 @@ def offene_abweichungen_gesamt():
     return row["c"] if row else 0
 
 
-def offene_massnahmen_nach_status():
-    """Offene Massnahmen (aktueller Status ungleich 'Fertig'/'Wirksam') gruppiert nach Status."""
-    massnahmen = db.list_massnahmen()
-    result = {}
-    for m in massnahmen:
-        if m["aktuellerStatusId"] not in (4, 5):
-            name = m["aktuellerStatusName"] or "Erfasst"
-            result[name] = result.get(name, 0) + 1
-    return result
+def massnahmen_nach_status():
+    """Anzahl Massnahmen je Status (Look_QM_MassnahmenStatus: offen/geplant/fertig/wirksam,
+    siehe STG_QM_AuditMassnahme.statusMassnahmeID) - fuer Dashboard und AuditHome."""
+    return db.query("""
+        SELECT s.statusName AS statusName, COUNT(m.id) AS anzahl
+        FROM Look_QM_MassnahmenStatus s
+        LEFT JOIN STG_QM_AuditMassnahme m ON m.statusMassnahmeID = s.id
+        GROUP BY s.id, s.statusName
+        ORDER BY s.id
+    """)
 
 
 def abweichungsquote_je_prozess():
@@ -51,7 +52,7 @@ def abweichungsquote_je_prozess():
         LEFT JOIN STG_QM_AuditProofs pf ON pf.auditPlanId = pl.id
         LEFT JOIN STG_QM_AuditResult r ON r.auditProofsId = pf.id
         GROUP BY pr.id, pr.processName
-        HAVING bewertet > 0
+        HAVING COUNT(DISTINCT CASE WHEN r.auditBewertungID IS NOT NULL THEN pf.id END) > 0
         ORDER BY prozessName
     """)
     result = []
@@ -158,11 +159,15 @@ def audithome_kpis():
 
 
 def get_dashboard_kpis():
-    return {
+    """Kennzahlen fuer die Seite 'Dashboard/KPIs' - enthaelt zusaetzlich dieselben Kennzahlen
+    wie die Startseite AuditHome (siehe audithome_kpis), damit beide Seiten konsistent sind."""
+    data = {
         "audits_je_status": audits_je_status(),
         "offene_abweichungen": offene_abweichungen_gesamt(),
-        "offene_massnahmen_je_status": offene_massnahmen_nach_status(),
+        "massnahmen_je_status": massnahmen_nach_status(),
         "abweichungsquote_je_prozess": abweichungsquote_je_prozess(),
         "anzahl_programme": anzahl_audit_programme(),
         "anzahl_plaene": anzahl_audit_plaene(),
     }
+    data.update(audithome_kpis())
+    return data

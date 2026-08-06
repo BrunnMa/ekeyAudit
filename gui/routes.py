@@ -4,8 +4,10 @@ gui/routes.py - Alle Flask-Routen der ekeyAudit-Anwendung (ein Blueprint 'gui').
 
 import itertools
 import os
+import tempfile
 import threading
 import time
+import uuid
 from datetime import datetime
 
 from flask import (
@@ -18,6 +20,7 @@ import security
 import kpi
 import reports
 import com
+import excel_import
 
 gui = Blueprint("gui", __name__, template_folder="templates", static_folder="static")
 
@@ -322,6 +325,7 @@ def audit_plan():
         checkliste_plan_open_id=checkliste_plan_open_id,
         edit_proof=edit_proof,
         next_reihenfolge_by_plan=next_reihenfolge_by_plan,
+        aktuelles_jahr=datetime.now().year,
     )
 
 
@@ -334,6 +338,77 @@ def _checkliste_name(checkliste_id):
         return None
     checkliste = db.get_checkliste(checkliste_id)
     return checkliste["bezeichnung"] if checkliste else None
+
+
+@gui.route("/audit-plan/import", methods=["POST"])
+@security.login_required
+def audit_plan_import():
+    """Importiert Auditplan-Eintraege (inkl. Proofs) aus einer MS-Excel-Vorlage: ein
+    Tabellenblatt = ein Auditplan-Eintrag (Fachbereich = Blattname, Status = 'Geplant',
+    Prozess bleibt leer) - siehe excel_import.py fuer das genaue Spaltenformat."""
+    programm_filter = request.form.get("programmFilter") or None
+    programm_id = request.form.get("auditProgrammId")
+    if not programm_id:
+        flash("Bitte ein Auditprogramm fuer den Import waehlen.", "error")
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
+    datei = request.files.get("importFile")
+    if not datei or not datei.filename:
+        flash("Bitte eine Excel-Datei auswaehlen.", "error")
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
+    ext = os.path.splitext(datei.filename)[1].lower()
+    if ext not in (".xls", ".xlsx", ".xlsm"):
+        flash("Nur .xls-, .xlsx- oder .xlsm-Dateien werden unterstuetzt.", "error")
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
+    tmp_pfad = os.path.join(tempfile.gettempdir(), f"auditplan_import_{uuid.uuid4().hex}{ext}")
+    datei.save(tmp_pfad)
+    try:
+        blaetter = excel_import.parse_auditplan_excel(tmp_pfad)
+    except Exception as exc:  # noqa: BLE001 - jeder Parsing-Fehler soll dem Nutzer klar gemeldet werden
+        flash(f"Import fehlgeschlagen, Datei konnte nicht gelesen werden: {exc}", "error")
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+    finally:
+        if os.path.exists(tmp_pfad):
+            os.remove(tmp_pfad)
+
+    if not blaetter:
+        flash(
+            "In der Datei wurden keine passenden Tabellenblaetter (mit einer Fragekopfzeile) "
+            "gefunden.", "error"
+        )
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
+    status_geplant = db.query(
+        "SELECT id FROM Look_QM_AuditPlanStatus WHERE planStatus = ?", ("Geplant",), fetchone=True
+    )
+    status_id = status_geplant["id"] if status_geplant else None
+
+    anzahl_plaene = 0
+    anzahl_proofs = 0
+    for blatt in blaetter:
+        fachbereich_id = db.get_or_create_fachbereich(blatt["fachbereich"])
+        plan_id = db.create_audit_plan({
+            "auditProgrammId": programm_id,
+            "fachbereich": fachbereich_id,
+            "auditProzess": None,
+            "verantwortlich": None,
+            "datumAuditEnde": None,
+            "datumInterview": None,
+            "info": None,
+            "auditStatus": status_id,
+        })
+        if plan_id:
+            db.import_audit_plan_proofs(plan_id, blatt["proofs"])
+            anzahl_plaene += 1
+            anzahl_proofs += len(blatt["proofs"])
+
+    flash(
+        f"{anzahl_plaene} Auditplan-Eintrag/Eintraege mit insgesamt {anzahl_proofs} "
+        f"Proofs importiert.", "success"
+    )
+    return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
 
 
 @gui.route("/audit-plan/<int:plan_id>/delete", methods=["POST"])

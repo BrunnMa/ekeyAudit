@@ -1451,6 +1451,56 @@ def update_proof(proof_id, data):
     ))
 
 
+def get_or_create_fachbereich(name):
+    """Findet einen Fachbereich per Name (Look_QM_Fachbereich) oder legt ihn an, falls er noch
+    nicht existiert - genutzt beim Excel-Import von Auditplan-Eintraegen (ein Tabellenblatt =
+    ein Fachbereich, siehe excel_import.py). Die neue id wird bewusst NICHT ueber die
+    generische execute()-Funktion (SCOPE_IDENTITY(), in Produktion unzuverlaessig - siehe
+    add_massnahme) ermittelt, sondern direkt per OUTPUT INSERTED.id (MSSQL) bzw. cur.lastrowid
+    (SQLite), da sie hier sofort fuer den nachfolgenden INSERT in STG_QM_AuditPlan.fachbereich
+    benoetigt wird."""
+    name = (name or "").strip()
+    if not name:
+        return None
+
+    bestehender = query(
+        "SELECT id FROM Look_QM_Fachbereich WHERE fachbereich = ?", (name,), fetchone=True
+    )
+    if bestehender:
+        return bestehender["id"]
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if config.DB_BACKEND == "mssql":
+            cur.execute("""
+                INSERT INTO Look_QM_Fachbereich (fachbereich)
+                OUTPUT INSERTED.id
+                VALUES (?)
+            """, (name,))
+            row = cur.fetchone()
+            new_id = row[0] if row else None
+        else:
+            cur.execute("INSERT INTO Look_QM_Fachbereich (fachbereich) VALUES (?)", (name,))
+            new_id = cur.lastrowid
+        conn.commit()
+        return new_id
+    finally:
+        conn.close()
+
+
+def import_audit_plan_proofs(plan_id, proofs):
+    """Fuegt mehrere Proofs (aus dem Excel-Import, siehe excel_import.py) mit vorgegebener
+    Reihenfolge in einen Audit-Plan-Eintrag ein. Norm-Kapitel bleibt leer, da es im Fragetext
+    der Vorlage bereits enthalten ist."""
+    for p in proofs:
+        execute("""
+            INSERT INTO STG_QM_AuditProofs
+            (auditPlanId, auditChecklisteID, auditFrage, normKapitel, auditResultInfo, reihenfolge)
+            VALUES (?, NULL, ?, ?, ?, ?)
+        """, (plan_id, p["frage"], "", p.get("info", ""), p["reihenfolge"]))
+
+
 def update_plan_proof(proof_id, frage, norm_kapitel, info, reihenfolge):
     """Aktualisiert einen Proof im PopUp 'Checkliste' (Audit planen): Frage, Norm-Kapitel, Info
     und Reihenfolge. Die Felder Punkte/Auditor/Bewertung/Beispiel werden hier bewusst NICHT

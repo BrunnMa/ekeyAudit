@@ -341,23 +341,17 @@
         <div class="ekey-panel">
             <h2 class="ekey-h2">Geplante laufende Audits</h2>
             <p class="ekey-muted">Bitte ein aktives Auditprogramm waehlen, um dessen Auditplan-Eintraege anzuzeigen.</p>
-            <table class="ekey-table">
-                <thead><tr><th>Jahr</th><th>Typ</th><th>Aktion</th></tr></thead>
-                <tbody>
-                {% for p in programme_aktiv %}
-                    <tr>
-                        <td>{{ p.auditJahr }}</td>
-                        <td>{{ p.auditTyp }}</td>
-                        <td>
-                            <a href="{{ url_for('gui.audit_durchfuehren', programmId=p.id) }}"
-                               class="ekey-btn ekey-btn-small {% if programm_id and programm_id|string == p.id|string %}ekey-btn-active{% endif %}">Waehlen</a>
-                        </td>
-                    </tr>
-                {% else %}
-                    <tr><td colspan="3">Keine aktiven Auditprogramme vorhanden. Bitte unter "Auditprogramm erstellen" ein Programm aktivieren.</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
+            <form method="get" action="{{ url_for('gui.audit_durchfuehren') }}" class="ekey-inline-form">
+                <select name="programmId" onchange="this.form.submit()" required>
+                    <option value="">-- Auditprogramm waehlen --</option>
+                    {% for p in programme_aktiv %}
+                    <option value="{{ p.id }}" {% if programm_id and programm_id|string == p.id|string %}selected{% endif %}>{{ p.auditTyp }} {{ p.auditJahr }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% if not programme_aktiv %}
+            <p class="ekey-hint">Keine aktiven Auditprogramme vorhanden. Bitte unter "Auditprogramm erstellen" ein Programm aktivieren.</p>
+            {% endif %}
         </div>
 
         <div class="ekey-panel">

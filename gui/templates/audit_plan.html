@@ -14,6 +14,45 @@
 
 <div class="ekey-form-actions" style="margin-bottom: 16px;">
     <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerAuditplanEintrag')">+ Neuer Auditplan-Eintrag erstellen</button>
+    <button type="button" class="ekey-btn" onclick="ekeyOpenModal('modalAuditplanImport')">Auditplan importieren</button>
+</div>
+
+<div id="modalAuditplanImport" class="ekey-modal-overlay">
+<div class="ekey-modal">
+<div class="ekey-modal-header">
+    <h2>Auditplan importieren</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalAuditplanImport')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <p class="ekey-hint">
+        Jedes Tabellenblatt der Excel-Datei wird als eigener Auditplan-Eintrag angelegt
+        (Fachbereich = Name des Tabellenblattes, Status "Geplant"). Das Tabellenblatt
+        "Settings" wird uebersprungen.
+    </p>
+    <form method="post" action="{{ url_for('gui.audit_plan_import') }}" enctype="multipart/form-data">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <div class="ekey-form-grid">
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="importAuditProgrammId">Auditprogramm</label>
+                <select id="importAuditProgrammId" name="auditProgrammId" required>
+                    <option value="">-- auswaehlen --</option>
+                    {% for p in programme_auswahl %}
+                    <option value="{{ p.id }}" {% if p.auditJahr == aktuelles_jahr %}selected{% endif %}>{{ p.auditJahr }} - {{ p.auditTyp }} - {{ p.unternehmen }} ({{ p.startDatum }} - {{ p.endDatum }}){% if not p.aktiv %} (inaktiv){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide">
+                <label for="importFile">Excel-Datei (.xls, .xlsx, .xlsm)</label>
+                <input type="file" id="importFile" name="importFile" accept=".xls,.xlsx,.xlsm" required>
+            </div>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary">Importieren</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalAuditplanImport')">Abbrechen</button>
+        </div>
+    </form>
+</div>
+</div>
 </div>
 
 <div id="modalNeuerAuditplanEintrag" class="ekey-modal-overlay{% if edit_plan %} ekey-modal-open{% endif %}">
