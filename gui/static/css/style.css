@@ -420,6 +420,58 @@ input:focus, select:focus, textarea:focus {
   background: var(--ekey-primary);
 }
 
+/* Gruppierte KPI-Darstellung: eine grosse Hauptkachel je Gruppe (Auditprogramme/AuditProofs),
+   daneben mehrere kleinere Detail-Kacheln. Gruppen ohne eigene Gesamtzahl (Ergebnisse/KPIs)
+   zeigen stattdessen nur eine Ueberschrift vor den Detail-Kacheln. */
+.ekey-kpi-group {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.ekey-kpi-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--ekey-primary);
+  border: 1px solid var(--ekey-border);
+  background: var(--ekey-table-header);
+  text-align: center;
+}
+.ekey-kpi-tile-main {
+  border: 1px solid var(--ekey-primary);
+  background: var(--ekey-table-header);
+  padding: 16px 20px;
+  text-align: center;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ekey-kpi-tile-main .ekey-kpi-value { font-size: 36px; }
+.ekey-kpi-tile-main .ekey-kpi-label { font-size: 13px; font-weight: bold; color: var(--ekey-text); margin-top: 6px; }
+.ekey-kpi-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  align-content: center;
+}
+.ekey-kpi-tile-small {
+  border: 1px solid var(--ekey-border);
+  background: #FFFFFF;
+  padding: 8px 10px;
+  text-align: center;
+  min-width: 100px;
+}
+.ekey-kpi-tile-small .ekey-kpi-value { font-size: 18px; }
+.ekey-kpi-tile-small .ekey-kpi-label { font-size: 10px; margin-top: 2px; }
+
 .ekey-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

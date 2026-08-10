@@ -3,91 +3,130 @@
 {% block content %}
 <h1 class="ekey-h1">Dashboard / KPIs</h1>
 
-<div class="ekey-kpi-grid">
-    <div class="ekey-kpi-tile">
+<!-- Gruppe: Auditprogramme -->
+<div class="ekey-kpi-group">
+    <div class="ekey-kpi-tile-main">
         <div class="ekey-kpi-value">{{ kpis.anzahl_programme }}</div>
         <div class="ekey-kpi-label">Auditprogramme gesamt</div>
     </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.programme_offen }}</div>
-        <div class="ekey-kpi-label">Auditprogramme offen</div>
+    <div class="ekey-kpi-details">
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.programme_gruppe.offen }}</div>
+            <div class="ekey-kpi-label">offen</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.programme_gruppe.in_arbeit }}</div>
+            <div class="ekey-kpi-label">in Arbeit</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.programme_gruppe.fertig }}</div>
+            <div class="ekey-kpi-label">fertig</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.anzahl_plaene }}</div>
+            <div class="ekey-kpi-label">Audit-Plaene gesamt</div>
+        </div>
     </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.anzahl_plaene }}</div>
-        <div class="ekey-kpi-label">Audit-Plaene gesamt</div>
-    </div>
-    <div class="ekey-kpi-tile">
+</div>
+
+<!-- Gruppe: AuditProofs -->
+<div class="ekey-kpi-group">
+    <div class="ekey-kpi-tile-main">
         <div class="ekey-kpi-value">{{ kpis.proofs_gesamt }}</div>
         <div class="ekey-kpi-label">AuditProofs gesamt</div>
     </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.mittelwert_punkte }}</div>
-        <div class="ekey-kpi-label">Mittelwert Punkte</div>
-    </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.erfuellungsgrad }}%</div>
-        <div class="ekey-kpi-label">Erfuellungsgrad</div>
-    </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.abweichungen_gesamt }}</div>
-        <div class="ekey-kpi-label">Auditabweichungen gesamt</div>
-    </div>
-    <div class="ekey-kpi-tile ekey-kpi-tile-warn">
-        <div class="ekey-kpi-value">{{ kpis.offene_abweichungen }}</div>
-        <div class="ekey-kpi-label">Offene Abweichungen gesamt</div>
-    </div>
-    <div class="ekey-kpi-tile">
-        <div class="ekey-kpi-value">{{ kpis.massnahmen_gesamt }}</div>
-        <div class="ekey-kpi-label">Massnahmen gesamt</div>
+    <div class="ekey-kpi-details">
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.offen }}</div>
+            <div class="ekey-kpi-label">offen</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.punkte_0 }}</div>
+            <div class="ekey-kpi-label">Punkte: 0</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.punkte_1 }}</div>
+            <div class="ekey-kpi-label">Punkte: 1</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.punkte_2 }}</div>
+            <div class="ekey-kpi-label">Punkte: 2</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.punkte_3 }}</div>
+            <div class="ekey-kpi-label">Punkte: 3</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.punkte_4 }}</div>
+            <div class="ekey-kpi-label">Punkte: 4</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_kennzahlen.erledigt }}</div>
+            <div class="ekey-kpi-label">erledigt</div>
+        </div>
     </div>
 </div>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Audits je Status</h2>
-    <table class="ekey-table">
-        <thead><tr><th>Status</th><th>Anzahl</th><th>Balken</th></tr></thead>
-        <tbody>
-        {% for row in kpis.audits_je_status %}
-            <tr>
-                <td>{{ row.statusName }}</td>
-                <td>{{ row.anzahl }}</td>
-                <td><div class="ekey-bar" style="width: {{ (row.anzahl * 20) if row.anzahl < 5 else 100 }}px;"></div></td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Gruppe: Ergebnisse (Abweichungen + Massnahmen) -->
+<div class="ekey-kpi-group">
+    <div class="ekey-kpi-group-heading">Ergebnisse</div>
+    <div class="ekey-kpi-details">
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.abweichungen_gruppe.offen }}</div>
+            <div class="ekey-kpi-label">Abweichungen offen</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.abweichungen_gruppe.in_arbeit }}</div>
+            <div class="ekey-kpi-label">Abweichungen in Arbeit</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.abweichungen_gruppe.erledigt }}</div>
+            <div class="ekey-kpi-label">Abweichungen erledigt</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.massnahmen_gruppe.offen }}</div>
+            <div class="ekey-kpi-label">Massnahmen offen</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.massnahmen_gruppe.in_arbeit }}</div>
+            <div class="ekey-kpi-label">Massnahmen in Arbeit</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.massnahmen_gruppe.erledigt }}</div>
+            <div class="ekey-kpi-label">Massnahmen erledigt</div>
+        </div>
+    </div>
 </div>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Massnahmen nach Status</h2>
-    <table class="ekey-table">
-        <thead><tr><th>Status</th><th>Anzahl</th></tr></thead>
-        <tbody>
-        {% for row in kpis.massnahmen_je_status %}
-            <tr><td>{{ row.statusName }}</td><td>{{ row.anzahl }}</td></tr>
-        {% else %}
-            <tr><td colspan="2">Keine Massnahmen erfasst.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Gruppe: KPIs -->
+<div class="ekey-kpi-group">
+    <div class="ekey-kpi-group-heading">KPIs</div>
+    <div class="ekey-kpi-details">
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.erfuellungsgrad }}%</div>
+            <div class="ekey-kpi-label">Erfuellungsgrad</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.erfuellungsgrad_intern }}%</div>
+            <div class="ekey-kpi-label">Erfuellungsgrad intern</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.erfuellungsgrad_extern }}%</div>
+            <div class="ekey-kpi-label">Erfuellungsgrad extern</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_pro_audit }}</div>
+            <div class="ekey-kpi-label">Proofs pro Audit</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.proofs_pro_plan }}</div>
+            <div class="ekey-kpi-label">Proofs pro Plan</div>
+        </div>
+        <div class="ekey-kpi-tile-small">
+            <div class="ekey-kpi-value">{{ kpis.massnahmen_pro_programm }}</div>
+            <div class="ekey-kpi-label">Massnahmen pro Programm</div>
+        </div>
+    </div>
 </div>
 
-<div class="ekey-panel">
-    <h2 class="ekey-h2">Abweichungsquote je Prozess</h2>
-    <table class="ekey-table">
-        <thead><tr><th>Prozess</th><th>Abweichungen</th><th>Bewertet</th><th>Quote</th></tr></thead>
-        <tbody>
-        {% for row in kpis.abweichungsquote_je_prozess %}
-            <tr>
-                <td>{{ row.prozess }}</td>
-                <td>{{ row.abweichungen }}</td>
-                <td>{{ row.bewertet }}</td>
-                <td>{{ row.quote }} %</td>
-            </tr>
-        {% else %}
-            <tr><td colspan="4">Noch keine bewerteten Proofs vorhanden.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
 {% endblock %}
