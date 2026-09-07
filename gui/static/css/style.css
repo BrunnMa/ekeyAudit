@@ -266,6 +266,9 @@ input:focus, select:focus, textarea:focus {
 .ekey-inline-form input, .ekey-inline-form select { width: auto; min-width: 120px; }
 .ekey-checkbox-label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
 .ekey-checkbox-label input[type="checkbox"] { width: auto; }
+.ekey-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--ekey-border); border-radius: 4px; padding: 8px; }
+.ekey-checkbox-item { display: flex; align-items: center; gap: 6px; font-weight: normal; }
+.ekey-checkbox-item input[type="checkbox"] { width: auto; }
 
 /* Aktiv/Inaktiv-Checkbox (z.B. Auditprogramm-Liste): gruen wenn aktiviert, grau wenn nicht. */
 .ekey-checkbox-aktiv {

@@ -84,22 +84,50 @@ def _iter_sheets(file_path):
         yield from _sheets_xlsx(file_path)
 
 
-def parse_auditplan_excel(file_path):
-    """Liest die Excel-Vorlage ein und liefert eine Liste von Auditplan-Eintraegen:
-    [{"fachbereich": "<Tabellenblattname>", "proofs": [{"reihenfolge": 1, "frage": "...",
-    "info": "..."}, ...]}, ...]. Blaetter ohne erkennbare Fragekopfzeile (z.B. "Settings")
-    werden uebersprungen."""
-    ergebnisse = []
+def _find_header_row(nrows, get_cell):
+    for r in range(min(nrows, 15)):
+        wert = get_cell(r, 0)
+        if isinstance(wert, str) and wert.strip() == "Frage":
+            return r
+    return None
+
+
+def list_sheet_names(file_path):
+    """Liefert die Namen aller Tabellenblaetter, die beim Import beruecksichtigt wuerden
+    (also eine erkennbare Fragekopfzeile besitzen und mindestens einen Proof enthalten
+    wuerden) - in Dateireihenfolge. Wird verwendet, um dem Anwender im PopUp
+    'Auditplan importieren' eine Checkbox-Liste der Tabellenblaetter anzuzeigen, BEVOR
+    tatsaechlich importiert wird."""
+    namen = []
     for sheet_name, nrows, get_cell in _iter_sheets(file_path):
         if sheet_name.strip().lower() in SETTINGS_SHEET_NAMEN:
             continue
+        header_row = _find_header_row(nrows, get_cell)
+        if header_row is None:
+            continue
+        namen.append(sheet_name.strip())
+    return namen
 
-        header_row = None
-        for r in range(min(nrows, 15)):
-            wert = get_cell(r, 0)
-            if isinstance(wert, str) and wert.strip() == "Frage":
-                header_row = r
-                break
+
+def parse_auditplan_excel(file_path, nur_blaetter=None):
+    """Liest die Excel-Vorlage ein und liefert eine Liste von Auditplan-Eintraegen:
+    [{"fachbereich": "<Tabellenblattname>", "proofs": [{"reihenfolge": 1, "frage": "...",
+    "info": "..."}, ...]}, ...]. Blaetter ohne erkennbare Fragekopfzeile (z.B. "Settings")
+    werden uebersprungen. Ist 'nur_blaetter' angegeben (Liste von Blattnamen), werden nur
+    diese Blaetter beruecksichtigt (z.B. die im PopUp markierten Tabellenblaetter)."""
+    erlaubte_blaetter = None
+    if nur_blaetter is not None:
+        erlaubte_blaetter = {name.strip() for name in nur_blaetter}
+
+    ergebnisse = []
+    for sheet_name, nrows, get_cell in _iter_sheets(file_path):
+        sheet_name = sheet_name.strip()
+        if sheet_name.lower() in SETTINGS_SHEET_NAMEN:
+            continue
+        if erlaubte_blaetter is not None and sheet_name not in erlaubte_blaetter:
+            continue
+
+        header_row = _find_header_row(nrows, get_cell)
         if header_row is None:
             continue
 
@@ -118,6 +146,6 @@ def parse_auditplan_excel(file_path):
             r += 1
 
         if proofs:
-            ergebnisse.append({"fachbereich": sheet_name.strip(), "proofs": proofs})
+            ergebnisse.append({"fachbereich": sheet_name, "proofs": proofs})
 
     return ergebnisse

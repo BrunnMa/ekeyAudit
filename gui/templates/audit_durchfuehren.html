@@ -10,6 +10,15 @@
     '4': '#43A047'
 } %}
 
+{% set status_farben = {
+    'Entwurf': '#000000',
+    'Geplant': 'var(--ekey-primary)',
+    'In Arbeit': '#E67E22',
+    'Fertig': 'var(--ekey-success)',
+    'Abgebrochen': 'var(--ekey-error)',
+    'Zurueckgestellt': 'var(--ekey-muted)'
+} %}
+
 {% if detail_mode %}
     <h1 class="ekey-h1">Audit durchfuehren - Plan #{{ plan.id }}</h1>
     <p class="ekey-muted">Fachbereich: {{ plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
@@ -367,7 +376,7 @@
                     <tr>
                         <td>{{ pl.fachbereichName }}</td>
                         <td>{{ pl.prozessName }}</td>
-                        <td>{{ pl.statusName }}</td>
+                        <td style="color: {{ status_farben.get(pl.statusName, '') }}; font-weight: bold;">{{ pl.statusName }}</td>
                         <td>
                             {% if entwurf_status_id and pl.auditStatus|string == entwurf_status_id|string %}
                             <span class="ekey-muted">Entwurf - noch nicht bearbeitbar</span>

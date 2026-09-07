@@ -6,10 +6,11 @@
 
 {% set status_farben = {
     'Entwurf': '#000000',
-    'Geplant': 'var(--ekey-success)',
-    'Fertig': 'var(--ekey-primary)',
+    'Geplant': 'var(--ekey-primary)',
+    'In Arbeit': '#E67E22',
+    'Fertig': 'var(--ekey-success)',
     'Abgebrochen': 'var(--ekey-error)',
-    'Zurueckgestellt': '#888888'
+    'Zurueckgestellt': 'var(--ekey-muted)'
 } %}
 
 <div class="ekey-form-actions" style="margin-bottom: 16px;">
@@ -25,12 +26,14 @@
 </div>
 <div class="ekey-modal-body">
     <p class="ekey-hint">
-        Jedes Tabellenblatt der Excel-Datei wird als eigener Auditplan-Eintrag angelegt
+        Jedes markierte Tabellenblatt der Excel-Datei wird als eigener Auditplan-Eintrag angelegt
         (Fachbereich = Name des Tabellenblattes, Status "Geplant"). Das Tabellenblatt
-        "Settings" wird uebersprungen.
+        "Settings" wird nie angezeigt und automatisch uebersprungen.
     </p>
-    <form method="post" action="{{ url_for('gui.audit_plan_import') }}" enctype="multipart/form-data">
+    <form method="post" action="{{ url_for('gui.audit_plan_import') }}" enctype="multipart/form-data" id="formAuditplanImport"
+        data-sheets-url="{{ url_for('gui.audit_plan_import_tabellenblaetter') }}">
         <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="sheetsErkannt" id="importSheetsErkannt" value="0">
         <div class="ekey-form-grid">
             <div class="ekey-form-row ekey-form-row-wide">
                 <label for="importAuditProgrammId">Auditprogramm</label>
@@ -43,7 +46,13 @@
             </div>
             <div class="ekey-form-row ekey-form-row-wide">
                 <label for="importFile">Excel-Datei (.xls, .xlsx, .xlsm)</label>
-                <input type="file" id="importFile" name="importFile" accept=".xls,.xlsx,.xlsm" required>
+                <input type="file" id="importFile" name="importFile" accept=".xls,.xlsx,.xlsm" required
+                    onchange="ekeyLoadImportSheets(this)">
+            </div>
+            <div class="ekey-form-row ekey-form-row-wide" id="importSheetsRow" style="display: none;">
+                <label>Tabellenblaetter</label>
+                <div id="importSheetsList" class="ekey-checkbox-list"></div>
+                <span class="ekey-hint">Nur die markierten Tabellenblaetter werden importiert.</span>
             </div>
         </div>
         <div class="ekey-form-actions">
@@ -88,12 +97,12 @@
             </div>
             <div class="ekey-form-row">
                 <label for="auditProzess">Prozess</label>
-                <select id="auditProzess" name="auditProzess" onchange="ekeySyncFachbereichFromProzess();">
-                    <option value="">-- auswaehlen --</option>
+                <select id="auditProzess" name="auditProzess" multiple size="6" onchange="ekeySyncFachbereichFromProzess();">
                     {% for pr in prozesse %}
-                    <option value="{{ pr.id }}" data-fachbereich="{{ pr.fachbereich or '' }}" {% if edit_plan and edit_plan.auditProzess|string == pr.id|string %}selected{% endif %}>{{ pr.processName }}</option>
+                    <option value="{{ pr.id }}" data-fachbereich="{{ pr.fachbereich or '' }}" {% if pr.id in edit_plan_prozess_ids %}selected{% endif %}>{{ pr.processName }}</option>
                     {% endfor %}
                 </select>
+                <span class="ekey-hint">Mehrfachauswahl moeglich (STRG bzw. CMD gedrueckt halten). Zeigt nur Prozesse des gewaehlten Fachbereichs.</span>
             </div>
             <div class="ekey-form-row">
                 <label for="verantwortlich">Verantwortlich</label>
@@ -247,6 +256,8 @@
 
     <div class="ekey-form-actions" style="margin-bottom: 16px;">
         <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalNeuerProofPlan{{ pl.id }}')">+ Proof manuell hinzufuegen</button>
+        <button type="button" class="ekey-btn" {% if not proofs %}disabled title="Keine Proofs vorhanden"{% endif %}
+                onclick="ekeyOpenModal('modalAlsVorlagePlan{{ pl.id }}')">Als Vorlage speichern</button>
     </div>
 
     <table class="ekey-table">
@@ -282,6 +293,52 @@
         {% endfor %}
         </tbody>
     </table>
+</div>
+</div>
+</div>
+
+<div id="modalAlsVorlagePlan{{ pl.id }}" class="ekey-modal-overlay">
+<div class="ekey-modal" style="max-width: 500px;">
+<div class="ekey-modal-header">
+    <h2>Als Checklisten-Vorlage speichern - Plan #{{ pl.id }}</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalAlsVorlagePlan{{ pl.id }}')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <p class="ekey-hint">
+        Es werden nur die Datenfelder uebernommen, die eine Checklisten-Vorlage ohnehin speichert
+        (Frage, Norm-Kapitel, Info) - Auditergebnis-Felder (Punkte, Bewertung, Auditor, ...) werden
+        nicht mit uebernommen.
+    </p>
+    <form method="post" action="{{ url_for('gui.audit_plan_checkliste_als_vorlage', plan_id=pl.id) }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <div class="ekey-form-row">
+            <label class="ekey-checkbox-label">
+                <input type="radio" name="modus" value="neu" checked
+                       onchange="ekeyToggleVorlageModus('{{ pl.id }}', 'neu');"> Neue Vorlage anlegen
+            </label>
+            <label class="ekey-checkbox-label">
+                <input type="radio" name="modus" value="ersetzen"
+                       onchange="ekeyToggleVorlageModus('{{ pl.id }}', 'ersetzen');"> Bestehende Vorlage ersetzen
+            </label>
+        </div>
+        <div class="ekey-form-row" id="vorlageNeuFeld{{ pl.id }}">
+            <label for="vorlageBezeichnung{{ pl.id }}">Bezeichnung der neuen Vorlage</label>
+            <input type="text" id="vorlageBezeichnung{{ pl.id }}" name="bezeichnung">
+        </div>
+        <div class="ekey-form-row" id="vorlageErsetzenFeld{{ pl.id }}" style="display: none;">
+            <label for="vorlageChecklisteId{{ pl.id }}">Zu ersetzende Vorlage</label>
+            <select id="vorlageChecklisteId{{ pl.id }}" name="checkliste_id">
+                <option value="">-- waehlen --</option>
+                {% for c in checklisten %}
+                <option value="{{ c.id }}">{{ c.bezeichnung }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="ekey-form-actions">
+            <button type="submit" class="ekey-btn ekey-btn-primary" onclick="return ekeyConfirmVorlageSpeichern('{{ pl.id }}');">Speichern</button>
+            <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalAlsVorlagePlan{{ pl.id }}')">Abbrechen</button>
+        </div>
+    </form>
 </div>
 </div>
 </div>
@@ -380,42 +437,42 @@ function ekeyFachbereichChange(select) {
     }
 }
 
-// Zeigt im Prozess-Dropdown nur die Prozesse des gewaehlten Fachbereichs (kein Fachbereich
-// gewaehlt = alle Prozesse). Eine nicht mehr passende bisherige Auswahl wird zurueckgesetzt.
+// Zeigt im Prozess-Kombinationslistenfeld (Mehrfachauswahl) nur die Prozesse des gewaehlten
+// Fachbereichs (kein Fachbereich gewaehlt = alle Prozesse). Eine nicht mehr passende bisherige
+// Auswahl wird dabei automatisch abgewaehlt.
 function ekeyFilterProzessByFachbereich() {
     var fbSelect = document.getElementById('fachbereich');
     var prSelect = document.getElementById('auditProzess');
     if (!fbSelect || !prSelect) return;
     var fbValue = fbSelect.value;
-    var currentValue = prSelect.value;
-    var currentStillValid = false;
 
     for (var i = 0; i < prSelect.options.length; i++) {
         var opt = prSelect.options[i];
-        if (!opt.value) { continue; } // Platzhalter "-- auswaehlen --" bleibt immer sichtbar
         var optFb = opt.getAttribute('data-fachbereich') || '';
         var match = !fbValue || optFb === fbValue;
         opt.hidden = !match;
         opt.disabled = !match;
-        if (match && opt.value === currentValue) {
-            currentStillValid = true;
+        if (!match && opt.selected) {
+            opt.selected = false;
         }
-    }
-    if (currentValue && !currentStillValid) {
-        prSelect.value = '';
     }
 }
 
-// Wird ein Prozess gewaehlt, uebernimmt das Fachbereich-Dropdown automatisch dessen Fachbereich.
+// Wird (mindestens) ein Prozess ausgewaehlt, solange noch KEIN Fachbereich gesetzt ist,
+// uebernimmt das Fachbereich-Feld automatisch den Fachbereich des zuerst ausgewaehlten
+// Prozesses - danach filtert ekeyFilterProzessByFachbereich() die restliche Auswahl auf
+// Prozesse desselben Fachbereichs (ein Auditplan-Eintrag hat genau einen Fachbereich).
 function ekeySyncFachbereichFromProzess() {
     var prSelect = document.getElementById('auditProzess');
     var fbSelect = document.getElementById('fachbereich');
     if (!prSelect || !fbSelect) return;
-    var option = prSelect.options[prSelect.selectedIndex];
-    var fbId = option ? option.getAttribute('data-fachbereich') : '';
-    if (fbId && fbSelect.value !== fbId) {
-        fbSelect.value = fbId;
-        ekeyFachbereichChange(fbSelect);
+    if (!fbSelect.value) {
+        var ausgewaehlt = Array.prototype.filter.call(prSelect.options, function (o) { return o.selected; });
+        var fbId = ausgewaehlt.length > 0 ? ausgewaehlt[0].getAttribute('data-fachbereich') : '';
+        if (fbId) {
+            fbSelect.value = fbId;
+            ekeyFachbereichChange(fbSelect);
+        }
     }
     ekeyFilterProzessByFachbereich();
 }
@@ -428,6 +485,43 @@ function ekeyConfirmDeletePlan(deleteUrl) {
     var form = document.getElementById('formDeletePlan');
     if (form) form.setAttribute('action', deleteUrl);
     ekeyOpenModal('modalConfirmDeletePlan');
+}
+
+// PopUp "Als Checklisten-Vorlage speichern": zwischen "neue Vorlage" und "bestehende Vorlage
+// ersetzen" umschalten (blendet jeweils das passende Eingabefeld ein/aus).
+function ekeyToggleVorlageModus(planId, modus) {
+    var neuFeld = document.getElementById('vorlageNeuFeld' + planId);
+    var ersetzenFeld = document.getElementById('vorlageErsetzenFeld' + planId);
+    if (!neuFeld || !ersetzenFeld) return;
+    if (modus === 'ersetzen') {
+        neuFeld.style.display = 'none';
+        ersetzenFeld.style.display = '';
+    } else {
+        neuFeld.style.display = '';
+        ersetzenFeld.style.display = 'none';
+    }
+}
+
+// Vor dem Speichern noch einmal explizit nachfragen, da eine ersetzte Vorlage nicht
+// rueckgaengig gemacht werden kann.
+function ekeyConfirmVorlageSpeichern(planId) {
+    var ersetzenFeld = document.getElementById('vorlageErsetzenFeld' + planId);
+    var modusErsetzen = ersetzenFeld && ersetzenFeld.style.display !== 'none';
+    if (modusErsetzen) {
+        var select = document.getElementById('vorlageChecklisteId' + planId);
+        if (!select || !select.value) {
+            alert('Bitte eine Vorlage zum Ersetzen auswaehlen.');
+            return false;
+        }
+        var name = select.options[select.selectedIndex].text;
+        return confirm('Die bestehende Vorlage "' + name + '" wird mit den aktuellen Proofs dieses Plans ueberschrieben. Fortfahren?');
+    }
+    var bezeichnungFeld = document.getElementById('vorlageBezeichnung' + planId);
+    if (!bezeichnungFeld || !bezeichnungFeld.value.trim()) {
+        alert('Bitte eine Bezeichnung fuer die neue Vorlage eingeben.');
+        return false;
+    }
+    return confirm('Neue Checklisten-Vorlage "' + bezeichnungFeld.value.trim() + '" mit den aktuellen Proofs dieses Plans anlegen?');
 }
 </script>
 {% endblock %}

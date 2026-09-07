@@ -152,6 +152,71 @@ document.addEventListener("keydown", function (e) {
 });
 
 // ---------------------------------------------------------------------
+// Seite "Audit planen", PopUp "Auditplan importieren": nach Auswahl der
+// Excel-Datei werden deren Tabellenblaetter per AJAX ermittelt und als
+// Checkbox-Liste angezeigt (alle zunaechst markiert). Beim eigentlichen
+// Import (Formular-Absenden) werden dann nur die markierten Blaetter
+// beruecksichtigt (siehe routes.py: audit_plan_import).
+// ---------------------------------------------------------------------
+
+function ekeyLoadImportSheets(input) {
+    var row = document.getElementById("importSheetsRow");
+    var list = document.getElementById("importSheetsList");
+    var erkanntFeld = document.getElementById("importSheetsErkannt");
+    if (!row || !list || !erkanntFeld) return;
+
+    list.innerHTML = "";
+    erkanntFeld.value = "0";
+    row.style.display = "none";
+
+    if (!input.files || !input.files[0]) return;
+
+    var formData = new FormData();
+    formData.append("importFile", input.files[0]);
+
+    list.innerHTML = "<span class=\"ekey-hint\">Tabellenblaetter werden ermittelt...</span>";
+    row.style.display = "";
+
+    fetch(input.form.getAttribute("data-sheets-url") || "/audit-plan/import/tabellenblaetter", {
+        method: "POST",
+        body: formData
+    })
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+            list.innerHTML = "";
+            if (data.error) {
+                list.innerHTML = "<span class=\"ekey-hint\">" + data.error + "</span>";
+                row.style.display = "";
+                return;
+            }
+            if (!data.sheets || data.sheets.length === 0) {
+                list.innerHTML = "<span class=\"ekey-hint\">Keine passenden Tabellenblaetter (mit Fragekopfzeile) gefunden.</span>";
+                erkanntFeld.value = "1";
+                row.style.display = "";
+                return;
+            }
+            data.sheets.forEach(function (name) {
+                var label = document.createElement("label");
+                label.className = "ekey-checkbox-item";
+                var cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.name = "selectedSheets";
+                cb.value = name;
+                cb.checked = true;
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(" " + name));
+                list.appendChild(label);
+            });
+            erkanntFeld.value = "1";
+            row.style.display = "";
+        })
+        .catch(function () {
+            list.innerHTML = "<span class=\"ekey-hint\">Tabellenblaetter konnten nicht ermittelt werden.</span>";
+            row.style.display = "";
+        });
+}
+
+// ---------------------------------------------------------------------
 // Startseite (AuditHome): ausgewaehltes Auditprogramm oeffnen
 // ---------------------------------------------------------------------
 

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
-    session, send_file, abort
+    session, send_file, abort, jsonify
 )
 
 import database as db
@@ -193,10 +193,13 @@ def audit_plan():
     if request.method == "POST":
         plan_id = request.form.get("plan_id")
         ist_neuer_plan = not plan_id
+        # Kombinationslistenfeld 'Prozess' erlaubt Mehrfachauswahl (0, 1 oder mehrere Prozesse) -
+        # die Zuordnung selbst liegt in der n:m-Tabelle STG_QM_AuditPlanProzess, siehe
+        # db.set_plan_prozesse() weiter unten (nicht mehr Teil von 'data'/STG_QM_AuditPlan direkt).
+        auditProzess_ids = [v for v in request.form.getlist("auditProzess") if v]
         data = {
             "auditProgrammId": request.form.get("auditProgrammId"),
             "fachbereich": request.form.get("fachbereich"),
-            "auditProzess": request.form.get("auditProzess") or None,
             "verantwortlich": request.form.get("verantwortlich"),
             "datumAuditEnde": request.form.get("datumAuditEnde"),
             "datumInterview": request.form.get("datumInterview"),
@@ -229,6 +232,8 @@ def audit_plan():
             # rohen Datenbankfehler abbrechen, statt einer verstaendlichen Meldung.
             flash("Der Audit-Plan-Eintrag konnte nicht angelegt/ermittelt werden. Bitte erneut versuchen.", "error")
             return redirect(url_for("gui.audit_plan", programmFilter=data["auditProgrammId"]))
+
+        db.set_plan_prozesse(aktueller_plan_id, auditProzess_ids)
 
         # Checkliste (Vorlage aus Audit Governance) einmalig als konkrete Proofs
         # in diesen Audit-Plan-Eintrag uebernehmen - inkl. der Proofs der Vorlage.
@@ -277,6 +282,7 @@ def audit_plan():
     edit_plan = db.get_audit_plan(edit_id) if edit_id else None
     assigned_checkliste_id = edit_plan.get("checklisteId") if edit_plan else None
     assigned_checkliste_name = _checkliste_name(assigned_checkliste_id)
+    edit_plan_prozess_ids = db.list_prozess_ids_for_plan(edit_id) if edit_id else []
 
     # Fuer die Auswahl im Pop-up "Neuer/Bearbeiten Auditplan-Eintrag" duerfen nur aktive
     # Auditprogramme gewaehlt werden. Ist ein bestehender Eintrag einem Programm zugeordnet,
@@ -315,9 +321,10 @@ def audit_plan():
         programme_auswahl=programme_auswahl,
         prozesse=db.get_lookup("Look_QM_AuditProzess"),
         fachbereiche=db.get_lookup("Look_QM_Fachbereich"),
-        audit_status=db.get_lookup("Look_QM_AuditPlanStatus"),
+        audit_status=db.list_auditplan_status_optionen(),
         checklisten=db.list_checklisten(),
         edit_plan=edit_plan,
+        edit_plan_prozess_ids=edit_plan_prozess_ids,
         assigned_checkliste_id=assigned_checkliste_id,
         assigned_checkliste_name=assigned_checkliste_name,
         proofs_by_plan=proofs_by_plan,
@@ -340,12 +347,41 @@ def _checkliste_name(checkliste_id):
     return checkliste["bezeichnung"] if checkliste else None
 
 
+@gui.route("/audit-plan/import/tabellenblaetter", methods=["POST"])
+@security.login_required
+def audit_plan_import_tabellenblaetter():
+    """AJAX-Endpoint fuer das PopUp 'Auditplan importieren': ermittelt zu einer
+    (noch nicht importierten, nur temporaer gespeicherten) Excel-Datei die Namen aller
+    Tabellenblaetter, die beim Import beruecksichtigt wuerden - damit das PopUp dazu eine
+    Checkbox-Liste anzeigen kann, BEVOR tatsaechlich importiert wird."""
+    datei = request.files.get("importFile")
+    if not datei or not datei.filename:
+        return jsonify({"error": "Bitte eine Excel-Datei auswaehlen."}), 400
+
+    ext = os.path.splitext(datei.filename)[1].lower()
+    if ext not in (".xls", ".xlsx", ".xlsm"):
+        return jsonify({"error": "Nur .xls-, .xlsx- oder .xlsm-Dateien werden unterstuetzt."}), 400
+
+    tmp_pfad = os.path.join(tempfile.gettempdir(), f"auditplan_import_{uuid.uuid4().hex}{ext}")
+    datei.save(tmp_pfad)
+    try:
+        sheets = excel_import.list_sheet_names(tmp_pfad)
+    except Exception as exc:  # noqa: BLE001 - jeder Parsing-Fehler soll dem Nutzer klar gemeldet werden
+        return jsonify({"error": f"Datei konnte nicht gelesen werden: {exc}"}), 400
+    finally:
+        if os.path.exists(tmp_pfad):
+            os.remove(tmp_pfad)
+
+    return jsonify({"sheets": sheets})
+
+
 @gui.route("/audit-plan/import", methods=["POST"])
 @security.login_required
 def audit_plan_import():
     """Importiert Auditplan-Eintraege (inkl. Proofs) aus einer MS-Excel-Vorlage: ein
     Tabellenblatt = ein Auditplan-Eintrag (Fachbereich = Blattname, Status = 'Geplant',
-    Prozess bleibt leer) - siehe excel_import.py fuer das genaue Spaltenformat."""
+    Prozess bleibt leer) - siehe excel_import.py fuer das genaue Spaltenformat. Es werden
+    nur die im PopUp markierten Tabellenblaetter importiert."""
     programm_filter = request.form.get("programmFilter") or None
     programm_id = request.form.get("auditProgrammId")
     if not programm_id:
@@ -362,10 +398,23 @@ def audit_plan_import():
         flash("Nur .xls-, .xlsx- oder .xlsm-Dateien werden unterstuetzt.", "error")
         return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
 
+    # "sheetsErkannt" wird per JS gesetzt, sobald die Checkbox-Liste der Tabellenblaetter
+    # erfolgreich angezeigt wurde. Nur dann wird strikt nach der Auswahl gefiltert - falls
+    # JS aus irgendeinem Grund nicht gelaufen ist, werden (wie bisher) alle passenden
+    # Blaetter importiert, damit der Import nicht unerwartet leer laeuft.
+    sheets_erkannt = request.form.get("sheetsErkannt") == "1"
+    ausgewaehlte_blaetter = request.form.getlist("selectedSheets")
+
+    if sheets_erkannt and not ausgewaehlte_blaetter:
+        flash("Bitte mindestens ein Tabellenblatt fuer den Import markieren.", "error")
+        return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
+
     tmp_pfad = os.path.join(tempfile.gettempdir(), f"auditplan_import_{uuid.uuid4().hex}{ext}")
     datei.save(tmp_pfad)
     try:
-        blaetter = excel_import.parse_auditplan_excel(tmp_pfad)
+        blaetter = excel_import.parse_auditplan_excel(
+            tmp_pfad, nur_blaetter=ausgewaehlte_blaetter if sheets_erkannt else None
+        )
     except Exception as exc:  # noqa: BLE001 - jeder Parsing-Fehler soll dem Nutzer klar gemeldet werden
         flash(f"Import fehlgeschlagen, Datei konnte nicht gelesen werden: {exc}", "error")
         return redirect(url_for("gui.audit_plan", programmFilter=programm_filter))
@@ -392,7 +441,6 @@ def audit_plan_import():
         plan_id = db.create_audit_plan({
             "auditProgrammId": programm_id,
             "fachbereich": fachbereich_id,
-            "auditProzess": None,
             "verantwortlich": None,
             "datumAuditEnde": None,
             "datumInterview": None,
@@ -511,6 +559,53 @@ def audit_plan_proof_delete(proof_id):
     flash("Proof geloescht.", "success")
 
     programm_filter = request.form.get("programmFilter") or None
+    return redirect(url_for(
+        "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
+    ))
+
+
+@gui.route("/audit-plan/<int:plan_id>/checkliste/als-vorlage", methods=["POST"])
+@security.login_required
+def audit_plan_checkliste_als_vorlage(plan_id):
+    """Button '[Als Vorlage speichern]' im PopUp 'Checkliste' (Seite 'Audit planen'):
+    uebernimmt die aktuellen Proofs dieses Audit-Plan-Eintrags als Checklisten-Vorlage - je
+    nach Auswahl entweder als komplett neue Vorlage, oder durch Ueberschreiben der Proofs einer
+    bereits bestehenden Vorlage (siehe 'Audit governance > Checklisten'). Es werden dabei nur
+    die Datenfelder uebernommen, die eine Checklisten-Vorlage ohnehin speichert (Frage, Norm-
+    Kapitel, Info)."""
+    programm_filter = request.form.get("programmFilter") or None
+    if not db.get_audit_plan(plan_id):
+        abort(404)
+
+    modus = request.form.get("modus")
+    if modus == "neu":
+        bezeichnung = (request.form.get("bezeichnung") or "").strip()
+        if not bezeichnung:
+            flash("Bitte eine Bezeichnung fuer die neue Vorlage angeben.", "error")
+        else:
+            neue_checkliste_id, anzahl = db.create_checkliste_from_plan(plan_id, bezeichnung)
+            if not neue_checkliste_id:
+                flash("Die neue Vorlage konnte nicht angelegt werden. Bitte erneut versuchen.", "error")
+            else:
+                flash(
+                    f"Neue Checklisten-Vorlage '{bezeichnung}' angelegt ({anzahl} Proof(s) uebernommen).",
+                    "success"
+                )
+    elif modus == "ersetzen":
+        checkliste_id = request.form.get("checkliste_id") or None
+        if not checkliste_id:
+            flash("Bitte eine bestehende Vorlage zum Ersetzen auswaehlen.", "error")
+        else:
+            checkliste = db.get_checkliste(checkliste_id)
+            anzahl = db.replace_checkliste_proofs_from_plan(checkliste_id, plan_id)
+            name = checkliste["bezeichnung"] if checkliste else ""
+            flash(
+                f"Checklisten-Vorlage '{name}' wurde mit den Proofs dieses Plans ueberschrieben "
+                f"({anzahl} Proof(s)).", "success"
+            )
+    else:
+        flash("Bitte 'Neue Vorlage anlegen' oder 'Bestehende Vorlage ersetzen' waehlen.", "error")
+
     return redirect(url_for(
         "gui.audit_plan", programmFilter=programm_filter, checklistePlan=plan_id
     ))
@@ -854,8 +949,26 @@ def governance_fachbereiche():
         fachbereich_id = request.form.get("fachbereich_id")
         action = request.form.get("action")
         if action == "delete":
-            if db.lookup_is_referenced("Look_QM_Fachbereich", fachbereich_id):
-                flash("Fachbereich wird bereits in einem Audit-Plan verwendet und kann nicht geloescht werden.", "warning")
+            referenzen = db.lookup_is_referenced("Look_QM_Fachbereich", fachbereich_id)
+            if referenzen:
+                # Praezise Meldung je nach tatsaechlichem Grund - ein Fachbereich kann sowohl
+                # direkt an einem Audit-Plan haengen als auch indirekt ueber einen Prozess, der
+                # diesem Fachbereich zugeordnet ist (vorher wurde hier immer nur "Audit-Plan"
+                # gemeldet, auch wenn tatsaechlich ein Prozess der Grund war).
+                in_plan = "STG_QM_AuditPlan" in referenzen
+                in_prozess = "Look_QM_AuditProzess" in referenzen
+                if in_plan and in_prozess:
+                    flash(
+                        "Fachbereich wird bereits in einem Audit-Plan und einem Prozess "
+                        "verwendet und kann nicht geloescht werden.", "warning"
+                    )
+                elif in_plan:
+                    flash("Fachbereich wird bereits in einem Audit-Plan verwendet und kann nicht geloescht werden.", "warning")
+                else:
+                    flash(
+                        "Fachbereich ist einem Prozess zugeordnet (siehe 'Audit governance - "
+                        "Prozesse erfassen') und kann deshalb nicht geloescht werden.", "warning"
+                    )
             else:
                 db.delete_lookup_row("Look_QM_Fachbereich", fachbereich_id)
                 flash("Fachbereich geloescht.", "success")

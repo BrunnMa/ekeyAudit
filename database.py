@@ -246,6 +246,15 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS STG_QM_AuditPlanProzess (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        auditPlanId INTEGER NOT NULL,
+        prozessId INTEGER NOT NULL,
+        FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id),
+        FOREIGN KEY (prozessId) REFERENCES Look_QM_AuditProzess(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS STG_QM_AuditProofs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         auditPlanId INTEGER NOT NULL,
@@ -499,6 +508,13 @@ SCHEMA_STATEMENTS_MSSQL = [
         FOREIGN KEY (auditProzess) REFERENCES Look_QM_AuditProzess(id),
         FOREIGN KEY (auditStatus) REFERENCES Look_QM_AuditPlanStatus(id)
     """),
+    ("STG_QM_AuditPlanProzess", """
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        auditPlanId INT NOT NULL,
+        prozessId INT NOT NULL,
+        FOREIGN KEY (auditPlanId) REFERENCES STG_QM_AuditPlan(id),
+        FOREIGN KEY (prozessId) REFERENCES Look_QM_AuditProzess(id)
+    """),
     ("STG_QM_AuditProofs", """
         id INT IDENTITY(1,1) PRIMARY KEY,
         auditPlanId INT NOT NULL,
@@ -638,6 +654,9 @@ def init_db():
     _migrate_auditresult_punkte_column()
     _migrate_auditresult_rename_info_column()
     _migrate_massnahme_status_column()
+    _migrate_auditplanstatus_in_arbeit()
+    _migrate_fix_auditplan_status_fk()
+    _migrate_auditplan_prozess_to_junction()
 
 
 def _column_exists(cur, table, column):
@@ -864,6 +883,93 @@ def _migrate_massnahme_status_column():
         conn.close()
 
 
+def _migrate_auditplanstatus_in_arbeit():
+    """Nachtraeglich eingefuehrter Status 'In Arbeit' fuer Auditplan-Eintraege
+    (Look_QM_AuditPlanStatus), zusaetzlich zu Entwurf/Geplant/Fertig/Abgebrochen/
+    Zurueckgestellt - analog zum bereits vorhandenen Status 'In Arbeit' bei
+    Auditprogrammen (Look_QM_AuditStatus). Bei bereits bestehenden Datenbanken wird der
+    Status hier idempotent ergaenzt (ueber die normale Auto-Increment-ID, die bestehenden
+    IDs 1..5 bleiben unveraendert). Bei Neuinstallationen ist er bereits im Seed enthalten,
+    hier passiert dann nichts."""
+    row = query(
+        "SELECT id FROM Look_QM_AuditPlanStatus WHERE planStatus = ?", ("In Arbeit",), fetchone=True
+    )
+    if row is None:
+        execute(
+            "INSERT INTO Look_QM_AuditPlanStatus (planStatus, info) VALUES (?, ?)",
+            ("In Arbeit", "Auditplan-Eintrag wird gerade bearbeitet/durchgefuehrt"),
+        )
+
+
+def _migrate_fix_auditplan_status_fk():
+    """Korrigiert eine historisch falsche FOREIGN-KEY-Zuordnung auf (schon laenger
+    bestehenden) SQL-Server-Datenbanken: STG_QM_AuditPlan.auditStatus zeigte dort auf
+    Look_QM_AuditStatus (die Status-Tabelle fuer AUDITPROGRAMME: Erfasst/Geplant/In Arbeit/
+    Fertig/Wirksam) statt - wie im Code (SCHEMA_STATEMENTS_MSSQL) immer vorgesehen - auf
+    Look_QM_AuditPlanStatus (die eigentliche Status-Tabelle fuer AUDITPLAN-EINTRAEGE:
+    Entwurf/Geplant/In Arbeit/Fertig/Abgebrochen/Zurueckgestellt). Da 'CREATE TABLE IF NOT
+    EXISTS' eine bereits vorhandene Tabelle nie neu anlegt, blieb dieser alte Fehler in
+    bestehenden Datenbanken unbemerkt bestehen - jede bisher verwendete AuditPlanStatus-id
+    (1-5) existierte zufaellig auch in Look_QM_AuditStatus, weshalb die (falsche) Constraint
+    nie einen Konflikt meldete. Aufgefallen ist es erst durch den neu eingefuehrten Status
+    'In Arbeit' (siehe _migrate_auditplanstatus_in_arbeit), dessen id in Look_QM_AuditStatus
+    nicht existiert: 'UPDATE... conflicted with the FOREIGN KEY constraint... referenced
+    table dbo.Look_QM_AuditStatus'.
+
+    Sucht die tatsaechliche (automatisch benannte) Constraint dynamisch anhand von Tabelle/
+    Spalte/referenzierter Tabelle und ersetzt sie durch eine korrekt benannte, auf
+    Look_QM_AuditPlanStatus zeigende Version. Nur fuer SQL Server relevant und idempotent
+    (wird die falsche Constraint nicht gefunden - z.B. weil bereits korrigiert oder bei
+    SQLite/Neuinstallationen - passiert nichts)."""
+    if config.DB_BACKEND != "mssql":
+        return
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT fk.name
+            FROM sys.foreign_keys fk
+            JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+            JOIN sys.tables tp ON tp.object_id = fk.parent_object_id
+            JOIN sys.tables tr ON tr.object_id = fk.referenced_object_id
+            JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+            WHERE tp.name = 'STG_QM_AuditPlan' AND c.name = 'auditStatus' AND tr.name = 'Look_QM_AuditStatus'
+        """)
+        row = cur.fetchone()
+        if row:
+            constraint_name = row[0]
+            cur.execute(f"ALTER TABLE dbo.STG_QM_AuditPlan DROP CONSTRAINT [{constraint_name}]")
+            cur.execute("""
+                ALTER TABLE dbo.STG_QM_AuditPlan
+                ADD CONSTRAINT FK_STG_QM_AuditPlan_auditStatus_AuditPlanStatus
+                FOREIGN KEY (auditStatus) REFERENCES dbo.Look_QM_AuditPlanStatus(id)
+            """)
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_auditplan_prozess_to_junction():
+    """Migriert die bisherige 1:1-Zuordnung STG_QM_AuditPlan.auditProzess (genau ein Prozess
+    pro Auditplan-Eintrag) in die neue n:m-Zuordnungstabelle STG_QM_AuditPlanProzess (mehrere
+    Prozesse pro Auditplan-Eintrag moeglich, siehe PopUp 'Auditplan-Eintrag bearbeiten' ->
+    Kombinationslistenfeld 'Prozess'). Die alte Spalte bleibt aus Kompatibilitaetsgruenden in
+    der Tabelle bestehen, wird aber nicht mehr befuellt oder gelesen. Idempotent: uebertraegt
+    nur Plaene, die noch keinen Eintrag in der neuen Tabelle haben (verhindert Duplikate bei
+    jedem Start)."""
+    rows = query("""
+        SELECT pl.id AS plan_id, pl.auditProzess AS prozess_id
+        FROM STG_QM_AuditPlan pl
+        WHERE pl.auditProzess IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM STG_QM_AuditPlanProzess pp WHERE pp.auditPlanId = pl.id)
+    """)
+    for r in rows:
+        execute(
+            "INSERT INTO STG_QM_AuditPlanProzess (auditPlanId, prozessId) VALUES (?, ?)",
+            (r["plan_id"], r["prozess_id"]),
+        )
+
+
 def _fix_legacy_fachbereich_values():
     """Einmalige Reparatur von Alt-Daten: vor Einfuehrung der Fachbereich-Tabelle
     (Look_QM_Fachbereich) enthielt Look_QM_AuditProzess.fachbereich Freitext
@@ -1035,9 +1141,10 @@ def _seed_lookups():
                 [
                     (1, "Entwurf", "Auditplan-Eintrag ist erst angelegt, noch nicht final geplant"),
                     (2, "Geplant", "Auditplan-Eintrag ist final geplant"),
-                    (3, "Fertig", "Auditplan-Eintrag ist abgeschlossen"),
-                    (4, "Abgebrochen", "Auditplan-Eintrag wurde abgebrochen"),
-                    (5, "Zurueckgestellt", "Auditplan-Eintrag wurde zurueckgestellt"),
+                    (3, "In Arbeit", "Auditplan-Eintrag wird gerade bearbeitet/durchgefuehrt"),
+                    (4, "Fertig", "Auditplan-Eintrag ist abgeschlossen"),
+                    (5, "Abgebrochen", "Auditplan-Eintrag wurde abgebrochen"),
+                    (6, "Zurueckgestellt", "Auditplan-Eintrag wurde zurueckgestellt"),
                 ],
             )
             _identity_insert(cur, "Look_QM_AuditPlanStatus", False)
@@ -1114,6 +1221,28 @@ def get_lookup(table):
     return query(f"SELECT * FROM {table} ORDER BY id")
 
 
+AUDITPLAN_STATUS_REIHENFOLGE = ["Entwurf", "Geplant", "In Arbeit", "Fertig", "Abgebrochen", "Zurueckgestellt"]
+
+
+def list_auditplan_status_optionen():
+    """Statusliste fuer Auditplan-Eintraege (Look_QM_AuditPlanStatus) in sinnvoller
+    Workflow-Reihenfolge (Entwurf -> Geplant -> In Arbeit -> Fertig -> Abgebrochen ->
+    Zurueckgestellt) statt einfach nach ID sortiert - die IDs koennen sich je nach
+    Installationszeitpunkt/Migration unterscheiden (z.B. wurde 'In Arbeit' nachtraeglich
+    ergaenzt). Ueber 'Konfiguration' zusaetzlich angelegte Status-Werte werden alphabetisch
+    ans Ende angehaengt. Wird sowohl in der Liste 'Vorhandene Auditplaene' als auch im PopUp
+    'Neuer Auditplan-Eintrag erstellen' verwendet (teilen sich dieselbe Statusliste)."""
+    rows = get_lookup("Look_QM_AuditPlanStatus")
+
+    def sort_key(row):
+        name = row["planStatus"]
+        if name in AUDITPLAN_STATUS_REIHENFOLGE:
+            return (0, AUDITPLAN_STATUS_REIHENFOLGE.index(name))
+        return (1, name)
+
+    return sorted(rows, key=sort_key)
+
+
 def get_lookup_map(table, key_field, value_field):
     rows = get_lookup(table)
     return {r[key_field]: r[value_field] for r in rows}
@@ -1154,7 +1283,14 @@ def list_prozess_owner_namen():
 
 
 def lookup_is_referenced(table, id_value):
-    """Prueft, ob ein Lookup-Eintrag bereits von Arbeitsdaten referenziert wird (fuer Loeschwarnung)."""
+    """Prueft, ob ein Lookup-Eintrag bereits von Arbeitsdaten referenziert wird (fuer
+    Loeschwarnung). Liefert die Liste der referenzierenden Tabellen zurueck (leere Liste =
+    nicht referenziert - dank bool([]) == False funktionieren bestehende 'if
+    lookup_is_referenced(...)'-Abfragen unveraendert weiter). Die konkrete Tabellenliste
+    erlaubt es dem Aufrufer, eine praezise Fehlermeldung zu bauen, statt pauschal nur einen
+    der moeglichen Gruende zu nennen (siehe governance_fachbereiche: ein Fachbereich kann
+    sowohl direkt an einem Audit-Plan haengen als auch indirekt ueber einen Prozess, der
+    diesem Fachbereich zugeordnet ist)."""
     checks = {
         "Look_QM_AuditStatus": [
             ("STG_QM_AuditProgramm", "auditStatus"),
@@ -1166,7 +1302,7 @@ def lookup_is_referenced(table, id_value):
         "Look_QM_AuditTyp": [("STG_QM_AuditProgramm", "auditTyp")],
         "Look_QM_AuditBewertung": [("STG_QM_AuditResult", "auditBewertungID")],
         "Look_QM_AuditProzess": [
-            ("STG_QM_AuditPlan", "auditProzess"),
+            ("STG_QM_AuditPlanProzess", "prozessId"),
             ("STG_QM_AuditCheckliste", "prozessId"),
         ],
         "Look_QM_Fachbereich": [
@@ -1174,11 +1310,12 @@ def lookup_is_referenced(table, id_value):
             ("Look_QM_AuditProzess", "fachbereich"),
         ],
     }
+    referenzierende_tabellen = []
     for tbl, field in checks.get(table, []):
         row = query(f"SELECT COUNT(*) AS c FROM {tbl} WHERE {field} = ?", (id_value,), fetchone=True)
         if row and row["c"] > 0:
-            return True
-    return False
+            referenzierende_tabellen.append(tbl)
+    return referenzierende_tabellen
 
 
 # --------------------------------------------------------------------------
@@ -1303,11 +1440,10 @@ def delete_audit_ziel(ziel_id):
 
 def list_audit_plaene(programm_id=None):
     sql = """
-        SELECT pl.*, pr.processName AS prozessName, s.planStatus AS statusName,
+        SELECT pl.*, s.planStatus AS statusName,
                prog.startDatum AS progStart, prog.endDatum AS progEnde, prog.auditJahr,
                fb.fachbereich AS fachbereichName, fb.leitung AS fachbereichLeitung
         FROM STG_QM_AuditPlan pl
-        LEFT JOIN Look_QM_AuditProzess pr ON pr.id = pl.auditProzess
         LEFT JOIN Look_QM_AuditPlanStatus s ON s.id = pl.auditStatus
         LEFT JOIN STG_QM_AuditProgramm prog ON prog.id = pl.auditProgrammId
         LEFT JOIN Look_QM_Fachbereich fb ON fb.id = pl.fachbereich
@@ -1317,7 +1453,52 @@ def list_audit_plaene(programm_id=None):
         sql += " WHERE pl.auditProgrammId = ?"
         params = (programm_id,)
     sql += " ORDER BY pl.id DESC"
-    return query(sql, params)
+    plaene = query(sql, params)
+
+    # Prozesse (n:m ueber STG_QM_AuditPlanProzess, siehe Kombinationslistenfeld 'Prozess' im
+    # PopUp 'Auditplan-Eintrag bearbeiten') je Plan nachladen und zu einem kommagetrennten Text
+    # zusammenfassen - hier in Python statt per GROUP_CONCAT/STRING_AGG geloest, da diese
+    # Funktionen zwischen SQLite und SQL Server nicht kompatibel sind.
+    plan_ids = [p["id"] for p in plaene]
+    prozesse_by_plan = {}
+    if plan_ids:
+        platzhalter = ", ".join("?" for _ in plan_ids)
+        prozess_rows = query(f"""
+            SELECT pp.auditPlanId AS plan_id, pr.processName AS prozessName
+            FROM STG_QM_AuditPlanProzess pp
+            JOIN Look_QM_AuditProzess pr ON pr.id = pp.prozessId
+            WHERE pp.auditPlanId IN ({platzhalter})
+            ORDER BY pr.processName
+        """, tuple(plan_ids))
+        for r in prozess_rows:
+            prozesse_by_plan.setdefault(r["plan_id"], []).append(r["prozessName"])
+
+    for p in plaene:
+        p["prozessName"] = ", ".join(prozesse_by_plan.get(p["id"], [])) or None
+
+    return plaene
+
+
+def list_prozess_ids_for_plan(plan_id):
+    """Liefert die IDs aller einem Auditplan-Eintrag zugeordneten Prozesse (fuer die
+    Vorbelegung des Kombinationslistenfelds 'Prozess' im PopUp 'Auditplan-Eintrag
+    bearbeiten')."""
+    rows = query("SELECT prozessId FROM STG_QM_AuditPlanProzess WHERE auditPlanId = ?", (plan_id,))
+    return [r["prozessId"] for r in rows]
+
+
+def set_plan_prozesse(plan_id, prozess_ids):
+    """Ersetzt die Prozess-Zuordnung eines Auditplan-Eintrags vollstaendig (loeschen + neu
+    einfuegen) - einfacher und robuster als ein Diff, da beim Speichern des PopUps ohnehin
+    immer die komplette aktuelle Auswahl aus dem Kombinationslistenfeld 'Prozess' uebergeben
+    wird. 'prozess_ids' kann leer sein (kein Prozess ausgewaehlt)."""
+    execute("DELETE FROM STG_QM_AuditPlanProzess WHERE auditPlanId = ?", (plan_id,))
+    for prozess_id in prozess_ids:
+        if prozess_id:
+            execute(
+                "INSERT INTO STG_QM_AuditPlanProzess (auditPlanId, prozessId) VALUES (?, ?)",
+                (plan_id, prozess_id),
+            )
 
 
 def get_audit_plan(plan_id):
@@ -1387,8 +1568,12 @@ def create_audit_plan(data):
     _get_last_insert_id) verwendet: OUTPUT INSERTED.id liest die id direkt aus der INSERT-
     Anweisung selbst und ist damit unabhaengig von Sitzungs-/Gueltigkeitsbereichs-Eigenheiten,
     die SCOPE_IDENTITY() in der Praxis (produktive SQL-Server-Umgebung) NULL liefern liessen."""
+    # Hinweis: STG_QM_AuditPlan.auditProzess (Einzel-FK) wird bewusst NICHT mehr befuellt - die
+    # Prozess-Zuordnung erfolgt seit dem Kombinationslistenfeld 'Prozess' (Mehrfachauswahl) nur
+    # noch ueber die n:m-Tabelle STG_QM_AuditPlanProzess, siehe set_plan_prozesse() (wird vom
+    # Aufrufer in routes.py direkt im Anschluss an create_audit_plan() aufgerufen).
     params = (
-        data.get("auditProgrammId"), data.get("fachbereich"), data.get("auditProzess"),
+        data.get("auditProgrammId"), data.get("fachbereich"),
         data.get("verantwortlich"), data.get("datumAuditEnde"), data.get("datumInterview"),
         data.get("info"), data.get("auditStatus"),
     )
@@ -1398,19 +1583,19 @@ def create_audit_plan(data):
         if config.DB_BACKEND == "mssql":
             cur.execute("""
                 INSERT INTO STG_QM_AuditPlan
-                (auditProgrammId, fachbereich, auditProzess, verantwortlich, datumAuditEnde,
+                (auditProgrammId, fachbereich, verantwortlich, datumAuditEnde,
                  datumInterview, info, auditStatus)
                 OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, params)
             row = cur.fetchone()
             new_id = row[0] if row else None
         else:
             cur.execute("""
                 INSERT INTO STG_QM_AuditPlan
-                (auditProgrammId, fachbereich, auditProzess, verantwortlich, datumAuditEnde,
+                (auditProgrammId, fachbereich, verantwortlich, datumAuditEnde,
                  datumInterview, info, auditStatus)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, params)
             new_id = cur.lastrowid
         conn.commit()
@@ -1426,11 +1611,11 @@ def update_audit_plan_status(plan_id, status_id):
 def update_audit_plan(plan_id, data):
     execute("""
         UPDATE STG_QM_AuditPlan SET
-        auditProgrammId=?, fachbereich=?, auditProzess=?, verantwortlich=?,
+        auditProgrammId=?, fachbereich=?, verantwortlich=?,
         datumAuditEnde=?, datumInterview=?, info=?, auditStatus=?
         WHERE id=?
     """, (
-        data.get("auditProgrammId"), data.get("fachbereich"), data.get("auditProzess"),
+        data.get("auditProgrammId"), data.get("fachbereich"),
         data.get("verantwortlich"), data.get("datumAuditEnde"), data.get("datumInterview"),
         data.get("info"), data.get("auditStatus"), plan_id,
     ))
@@ -1607,10 +1792,39 @@ def get_checkliste(checkliste_id):
 
 
 def create_checkliste(data):
-    return execute("""
-        INSERT INTO STG_QM_AuditCheckliste (prozessId, bezeichnung, link, eigner)
-        VALUES (?, ?, ?, ?)
-    """, (data.get("prozessId"), data.get("bezeichnung"), data.get("link"), data.get("eigner")))
+    """Legt eine neue Checklisten-Vorlage an und liefert zuverlaessig deren neue id zurueck.
+
+    Wichtig: seit dem Button '[Als Vorlage speichern]' (Seite 'Audit planen') wird die
+    zurueckgelieferte id im Aufrufer sofort weiterverwendet, um die Proofs des Audit-Plan-
+    Eintrags direkt im Anschluss in genau diese neue Checkliste zu kopieren (siehe
+    create_checkliste_from_plan). Die bisherige generische execute()/_get_last_insert_id()
+    (SCOPE_IDENTITY()) lieferte auf dem produktiven SQL Server dabei NULL zurueck - der
+    nachfolgende INSERT in STG_QM_AuditChecklisteProofs schlug dann mit einem NOT-NULL-Fehler
+    auf auditChecklisteID fehl. Analog zu create_audit_plan() wird die id daher bewusst per
+    OUTPUT INSERTED.id (MSSQL) bzw. cur.lastrowid (SQLite) direkt aus der INSERT-Anweisung
+    selbst gelesen."""
+    params = (data.get("prozessId"), data.get("bezeichnung"), data.get("link"), data.get("eigner"))
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if config.DB_BACKEND == "mssql":
+            cur.execute("""
+                INSERT INTO STG_QM_AuditCheckliste (prozessId, bezeichnung, link, eigner)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?)
+            """, params)
+            row = cur.fetchone()
+            new_id = row[0] if row else None
+        else:
+            cur.execute("""
+                INSERT INTO STG_QM_AuditCheckliste (prozessId, bezeichnung, link, eigner)
+                VALUES (?, ?, ?, ?)
+            """, params)
+            new_id = cur.lastrowid
+        conn.commit()
+        return new_id
+    finally:
+        conn.close()
 
 
 def update_checkliste(checkliste_id, data):
@@ -1669,6 +1883,41 @@ def update_checkliste_proof_reihenfolge(proof_id, reihenfolge):
 
 def delete_checkliste_proof(proof_id):
     execute("DELETE FROM STG_QM_AuditChecklisteProofs WHERE id = ?", (proof_id,))
+
+
+def replace_checkliste_proofs_from_plan(checkliste_id, plan_id):
+    """Ersetzt die Proofs einer BESTEHENDEN Checklisten-Vorlage vollstaendig durch die
+    aktuellen Proofs eines Audit-Plan-Eintrags (Button '[Als Vorlage speichern]' im PopUp
+    'Checkliste' unter 'Audit planen', Variante 'bestehende Vorlage ersetzen'). Es werden nur
+    die Felder uebernommen, die eine Checklisten-Vorlage ohnehin speichert (Frage, Norm-
+    Kapitel, Info) - Auditergebnis-Felder (Punkte, Bewertung, Auditor, ...) sind Teil der
+    konkreten Durchfuehrung und nicht der Vorlage, analog zur umgekehrten Richtung
+    (copy_checkliste_to_proofs)."""
+    execute("DELETE FROM STG_QM_AuditChecklisteProofs WHERE auditChecklisteID = ?", (checkliste_id,))
+    proofs = list_proofs_for_plan(plan_id)
+    for p in proofs:
+        execute("""
+            INSERT INTO STG_QM_AuditChecklisteProofs
+            (auditChecklisteID, auditFrage, normKapitel, auditResultInfo, reihenfolge)
+            VALUES (?, ?, ?, ?, ?)
+        """, (checkliste_id, p["auditFrage"], p["normKapitel"], p["auditResultInfo"], p["reihenfolge"]))
+    return len(proofs)
+
+
+def create_checkliste_from_plan(plan_id, bezeichnung):
+    """Legt eine NEUE Checklisten-Vorlage an und uebernimmt die aktuellen Proofs eines
+    Audit-Plan-Eintrags hinein (Button '[Als Vorlage speichern]', Variante 'neue Vorlage
+    anlegen'). Prozess/Link/Eigner der neuen Vorlage bleiben zunaechst leer - ueber 'Audit
+    governance > Checklisten' anschliessend ergaenzbar, siehe replace_checkliste_proofs_from_plan()
+    fuer die eigentliche Proof-Uebernahme."""
+    checkliste_id = create_checkliste({"prozessId": None, "bezeichnung": bezeichnung, "link": None, "eigner": None})
+    if not checkliste_id:
+        # Sollte nach dem Anlegen praktisch nie vorkommen (siehe create_checkliste) - ohne diese
+        # Absicherung wuerde der nachfolgende Proof-Kopiervorgang mit einem rohen NOT-NULL-
+        # Datenbankfehler abbrechen statt mit einer verstaendlichen Rueckmeldung.
+        return None, 0
+    anzahl = replace_checkliste_proofs_from_plan(checkliste_id, plan_id)
+    return checkliste_id, anzahl
 
 
 # --------------------------------------------------------------------------
