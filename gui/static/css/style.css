@@ -33,6 +33,18 @@ html, body {
   font-size: 10px;
   color: var(--ekey-text);
   background: #FFFFFF;
+  height: 100%;
+}
+
+/* App-Shell-Layout: Kopf-/Fusszeile bleiben immer fix sichtbar, die Seite selbst scrollt NICHT
+   mehr als Ganzes - stattdessen scrollen Menueleiste, Arbeitsbereich und "Schnellzugriff" jeweils
+   fuer sich (siehe .ekey-body/.ekey-sidebar/.ekey-content/.ekey-rightbar unten). Das sorgt dafuer,
+   dass ein Mausrad-Scroll nur den Bereich bewegt, ueber dem sich der Mauszeiger gerade befindet. */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 a { color: var(--ekey-primary); text-decoration: none; }
@@ -40,6 +52,7 @@ a:hover { text-decoration: underline; }
 
 /* ---------------- Header ---------------- */
 .ekey-header {
+  flex: 0 0 60px;
   height: 60px;
   background: var(--ekey-header-bg);
   border-bottom: 1px solid var(--ekey-border);
@@ -84,7 +97,8 @@ a:hover { text-decoration: underline; }
 /* ---------------- Layout ---------------- */
 .ekey-body {
   display: flex;
-  min-height: calc(100vh - 60px - 34px);
+  flex: 1 1 auto;
+  min-height: 0; /* wichtig fuer Flex-Kinder, damit deren eigenes overflow-y:auto greift */
 }
 
 .ekey-sidebar {
@@ -94,6 +108,7 @@ a:hover { text-decoration: underline; }
   border-right: 1px solid var(--ekey-border);
   padding: 8px;
   position: relative;
+  overflow-y: auto; /* scrollt nur fuer sich, wenn die Menueliste laenger als der sichtbare Bereich ist */
 }
 .ekey-sidebar.collapsed { width: 40px; min-width: 40px; overflow: hidden; }
 .ekey-sidebar.collapsed .ekey-nav { display: none; }
@@ -136,6 +151,7 @@ a:hover { text-decoration: underline; }
   padding: 16px;
   width: 75%;
   overflow-x: auto;
+  overflow-y: auto; /* eigener Scrollbereich - bewegt die Menueleiste links nicht mit */
 }
 
 .ekey-rightbar {
@@ -144,6 +160,7 @@ a:hover { text-decoration: underline; }
   background: #FFFFFF;
   border-left: 1px solid var(--ekey-border);
   padding: 8px;
+  overflow-y: auto;
 }
 .ekey-rightbar-title {
   font-weight: bold;
@@ -159,6 +176,7 @@ a:hover { text-decoration: underline; }
 
 /* ---------------- Footer ---------------- */
 .ekey-footer {
+  flex: 0 0 34px;
   height: 34px;
   background: var(--ekey-footer-bg);
   border-top: 1px solid var(--ekey-border);
@@ -166,6 +184,18 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   font-size: 10px;
+}
+
+/* ---------------- Sticky Bereiche (Seitenueberschrift, Buttons/Listennamen ueber Listen) ----------------
+   .ekey-sticky-band wird zur Laufzeit per JS (app.js: ekeyUpdateStickyLayout) um Seitenueberschrift +
+   darueber platzierte Buttons (in .ekey-content) sowie um Listennamen + Buttons vor einer Tabelle (in
+   jedem .ekey-panel) gelegt. So bleiben diese Bereiche beim Scrollen sichtbar fixiert, waehrend nur die
+   Listenzeilen darunter/dahinter scrollen - der "top"-Wert wird dynamisch anhand der tatsaechlichen
+   Hoehe der jeweils darueberliegenden fixierten Bereiche gesetzt (siehe app.js), nicht hier fest verdrahtet. */
+.ekey-sticky-band {
+  position: sticky;
+  z-index: 2;
+  background: #FFFFFF;
 }
 
 /* ---------------- Headings ---------------- */
@@ -354,6 +384,12 @@ input:focus, select:focus, textarea:focus {
   text-align: left;
   padding: 6px 8px;
   border: 1px solid var(--ekey-border);
+  /* Ueberschrift der Liste bleibt beim Scrollen fix stehen, nur die Zeilen (tbody) scrollen -
+     wirkt automatisch relativ zum naechsten scrollenden Vorfahren (.ekey-content bei
+     Seiten-Listen, .ekey-modal-body bei PopUp-Listen - beide sind selbst overflow-y:auto). */
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .ekey-table td {
   padding: 5px 8px;
@@ -528,6 +564,8 @@ input:focus, select:focus, textarea:focus {
   align-items: flex-start;
   justify-content: center;
   padding: 40px 16px;
+  /* Sicherheitsnetz: falls das PopUp selbst je zu hoch fuer die Padding-Grenzen waere, scrollt
+     hier notfalls die Overlay-Flaeche statt Inhalt abzuschneiden. */
   overflow-y: auto;
 }
 .ekey-modal-overlay.ekey-modal-open { display: flex; }
@@ -536,6 +574,12 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--ekey-border);
   width: 100%;
   max-width: 760px;
+  /* PopUp selbst bewegt sich beim Scrollen nicht mehr mit der Seite: hoehe auf den sichtbaren
+     Bereich begrenzt (abzueglich des Overlay-Paddings von 40px oben/unten), Kopfzeile bleibt
+     fix, nur .ekey-modal-body scrollt (siehe unten). */
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
 }
 .ekey-modal-header {
   display: flex;
@@ -544,6 +588,7 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 14px;
   border-bottom: 1px solid var(--ekey-border);
   background: var(--ekey-table-header);
+  flex: 0 0 auto;
 }
 .ekey-modal-header h2 { margin: 0; border: none; padding: 0; }
 .ekey-modal-close {
@@ -556,7 +601,11 @@ input:focus, select:focus, textarea:focus {
   padding: 2px 8px;
 }
 .ekey-modal-close:hover { background: var(--ekey-primary); color: #FFFFFF; }
-.ekey-modal-body { padding: 14px; }
+.ekey-modal-body {
+  padding: 14px;
+  overflow-y: auto;
+  min-height: 0; /* wichtig, damit dieser Flex-Kindbereich ueberhaupt scrollen kann */
+}
 
 /* ---------------- Filterzeile (z.B. Auditprogramm-Auswahl vor Listenanzeige) ---------------- */
 .ekey-filter-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }

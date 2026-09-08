@@ -662,6 +662,15 @@ def audit_durchfuehren_detail(plan_id):
     interviews_by_proof = {}
     abweichungen_by_result = {}
     massnahmen_by_abweichung = {}
+    # Status je Abweichung ('in Arbeit'/'fertig', siehe db.compute_abweichung_status) sowie die
+    # Anzahl Abweichungen/Massnahmen je Proof - fuer die Spalten "Abw."/"Maßn." in der Proofs-
+    # Liste (Spalte "Abw." wird rot/gruen eingefaerbt, je nachdem ob mindestens eine Abweichung
+    # dieses Proofs noch "in Arbeit" ist). Alles wird hier aus den ohnehin schon geladenen Daten
+    # berechnet, ohne zusaetzliche Datenbankabfragen.
+    abweichung_status_by_id = {}
+    proof_abw_count = {}
+    proof_massn_count = {}
+    proof_abw_in_arbeit = {}
     for pf in proofs:
         results = db.list_results_for_proof(pf["id"])
         results_by_proof[pf["id"]] = results
@@ -673,15 +682,30 @@ def audit_durchfuehren_detail(plan_id):
         interviews_by_proof[pf["id"]] = db.query(
             "SELECT * FROM STG_QM_AuditInterview WHERE auditProofsId = ? ORDER BY id DESC", (pf["id"],)
         )
+        abw_count = 0
+        massn_count = 0
+        hat_in_arbeit = False
         for r in results:
-            abweichungen_by_result[r["id"]] = db.query(
+            abws = db.query(
                 "SELECT * FROM STG_QM_AuditAbweichung WHERE auditResultID = ? ORDER BY id DESC", (r["id"],)
             )
+            abweichungen_by_result[r["id"]] = abws
             # Massnahmen werden je Abweichung angezeigt (Spalte "Massnahmen" + eigenes PopUp
             # "Massnahmen" pro Abweichung) - deshalb hier nach abweichungId gruppiert statt nur
             # nach Ergebnis.
-            for m in db.list_massnahmen_for_result(r["id"]):
+            massnahmen_fuer_result = db.list_massnahmen_for_result(r["id"])
+            for m in massnahmen_fuer_result:
                 massnahmen_by_abweichung.setdefault(m["abweichungId"], []).append(m)
+            abw_count += len(abws)
+            massn_count += len(massnahmen_fuer_result)
+            for a in abws:
+                status = db.compute_abweichung_status(massnahmen_by_abweichung.get(a["id"], []))
+                abweichung_status_by_id[a["id"]] = status
+                if status == "in Arbeit":
+                    hat_in_arbeit = True
+        proof_abw_count[pf["id"]] = abw_count
+        proof_massn_count[pf["id"]] = massn_count
+        proof_abw_in_arbeit[pf["id"]] = hat_in_arbeit
 
     proof_open_id = request.args.get("proofOpen")
     abweichungen_open_id = request.args.get("abweichungenOpen")
@@ -699,6 +723,10 @@ def audit_durchfuehren_detail(plan_id):
         interviews_by_proof=interviews_by_proof,
         abweichungen_by_result=abweichungen_by_result,
         massnahmen_by_abweichung=massnahmen_by_abweichung,
+        abweichung_status_by_id=abweichung_status_by_id,
+        proof_abw_count=proof_abw_count,
+        proof_massn_count=proof_massn_count,
+        proof_abw_in_arbeit=proof_abw_in_arbeit,
         massnahmen_status=db.get_lookup("Look_QM_MassnahmenStatus"),
         proof_open_id=proof_open_id,
         abweichungen_open_id=abweichungen_open_id,

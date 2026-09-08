@@ -2122,6 +2122,21 @@ def get_abweichung(abweichung_id):
     return query("SELECT * FROM STG_QM_AuditAbweichung WHERE id = ?", (abweichung_id,), fetchone=True)
 
 
+def compute_abweichung_status(massnahmen):
+    """Berechnet den Status einer Abweichung aus ihren Massnahmen - dieser Status kann NICHT
+    manuell gesetzt werden (PopUp 'Abweichung' unter 'Audit durchfuehren'): 'fertig', sobald
+    mindestens eine Massnahme erfasst ist UND alle davon auf 'wirksam' (Look_QM_MassnahmenStatus)
+    stehen; sonst 'in Arbeit' (auch wenn noch gar keine Massnahme erfasst wurde). 'massnahmen'
+    ist eine Liste von Massnahme-Zeilen mit dem Feld 'statusMassnahmeName' (siehe
+    list_massnahmen_for_result). Wird sowohl fuer die Status-Spalte im PopUp 'Abweichung' als
+    auch fuer die Spalte 'Abw.' in der Proofs-Liste verwendet."""
+    if not massnahmen:
+        return "in Arbeit"
+    if all((m.get("statusMassnahmeName") or "").strip().lower() == "wirksam" for m in massnahmen):
+        return "fertig"
+    return "in Arbeit"
+
+
 def delete_abweichung(abweichung_id):
     """Loescht eine einzelne Abweichung (PopUp 'Abweichung ... hinzufuegen' unter 'Audit
     durchfuehren') inkl. aller dazu erfassten Massnahmen und deren Status-Historie."""

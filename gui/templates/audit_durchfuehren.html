@@ -19,6 +19,11 @@
     'Zurueckgestellt': 'var(--ekey-muted)'
 } %}
 
+{% set abweichung_status_farben = {
+    'in Arbeit': 'var(--ekey-error)',
+    'fertig': 'var(--ekey-success)'
+} %}
+
 {% if detail_mode %}
     <h1 class="ekey-h1">Audit durchfuehren - Plan #{{ plan.id }}</h1>
     <p class="ekey-muted">Fachbereich: {{ plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
@@ -29,7 +34,7 @@
         </div>
         <h2 class="ekey-h2">Proofs</h2>
         <table class="ekey-table">
-            <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Bewertung</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Bewertung</th><th>Abw.</th><th>Ma&szlig;n.</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for pf in proofs %}
                 <tr>
@@ -42,10 +47,19 @@
                         -
                         {% endif %}
                     </td>
+                    <td>
+                        {% set abw_anzahl = proof_abw_count.get(pf.id, 0) %}
+                        {% if abw_anzahl > 0 %}
+                        <span style="color: {{ abweichung_status_farben['in Arbeit'] if proof_abw_in_arbeit.get(pf.id) else abweichung_status_farben['fertig'] }}; font-weight: bold;">{{ abw_anzahl }}</span>
+                        {% else %}
+                        {{ abw_anzahl }}
+                        {% endif %}
+                    </td>
+                    <td>{{ proof_massn_count.get(pf.id, 0) }}</td>
                     <td><button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalProof{{ pf.id }}')">Bearbeiten</button></td>
                 </tr>
             {% else %}
-                <tr><td colspan="4">Keine Proofs vorhanden. Bitte unter "Audit planen" eine Checkliste zuordnen bzw. Proofs manuell hinzufuegen.</td></tr>
+                <tr><td colspan="6">Keine Proofs vorhanden. Bitte unter "Audit planen" eine Checkliste zuordnen bzw. Proofs manuell hinzufuegen.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -250,13 +264,15 @@
         <hr class="ekey-form-hr">
         <h4 class="ekey-group-heading">Abweichungen</h4>
         <table class="ekey-table">
-            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Erfasst am</th><th>Massnahmen</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Erfasst am</th><th>Status</th><th>Massnahmen</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for a in proof_abweichungen %}
+                {% set a_status = abweichung_status_by_id.get(a.id, 'in Arbeit') %}
                 <tr>
                     <td>{{ a.abweichung }}</td>
                     <td>{{ a.nameEigner }}</td>
                     <td>{{ a.datumErfasst }}</td>
+                    <td style="color: {{ abweichung_status_farben.get(a_status, '') }}; font-weight: bold;">{{ a_status }}</td>
                     <td>{{ massnahmen_by_abweichung.get(a.id, [])|length }}</td>
                     <td>
                         <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalMassnahmenAbweichung{{ a.id }}')">Massnahmen</button>
@@ -266,7 +282,7 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="5">Noch keine Abweichung erfasst.</td></tr>
+                <tr><td colspan="6">Noch keine Abweichung erfasst.</td></tr>
             {% endfor %}
             </tbody>
         </table>
