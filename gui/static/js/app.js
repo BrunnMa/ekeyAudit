@@ -83,10 +83,9 @@ function ekeyRemoveAuditorRow(btn, containerId) {
 function ekeyOpenModal(id) {
     var overlay = document.getElementById(id);
     if (overlay) overlay.classList.add("ekey-modal-open");
-    // Beim Oeffnen neu berechnen: solange ein PopUp "display:none" war, liefert
-    // getBoundingClientRect() dort ueberall 0 - die Sticky-Bereiche im PopUp-Inhalt koennen
-    // also erst korrekt vermessen werden, NACHDEM es sichtbar wurde.
-    ekeyUpdateStickyLayout();
+    // Falls der Inhalt dieses PopUps erst jetzt zum ersten Mal sichtbar wird, sicherheitshalber
+    // erneut pruefen, ob alle Tabellen bereits in ihre Scrollbox gewrappt sind (siehe unten).
+    ekeyWrapTablesForScroll();
 }
 
 function ekeyCloseModal(id) {
@@ -109,92 +108,29 @@ document.addEventListener("click", function (e) {
 });
 
 // ---------------------------------------------------------------------
-// Fixierte Seitenueberschrift/Listennamen/Buttons ueber Listen (Tabellen), auf normalen
-// Seiten UND in PopUps: alles, was VOR der ersten Tabelle eines Bereichs steht (Seiten-
-// ueberschrift + darueber platzierte Buttons in .ekey-content; Listenname + Buttons/Filter
-// vor der Tabelle in jedem .ekey-panel), wird einmalig in einen Sticky-Wrapper
-// (.ekey-sticky-band) verschoben. Die "top"-Position wird dynamisch aus der tatsaechlich
-// gerenderten Hoehe der jeweils darueberliegenden fixierten Bereiche berechnet (nicht fest
-// verdrahtet), damit es unabhaengig von Schriftgroesse/Zeilenumbruch/Anzahl Buttons je Seite
-// korrekt bleibt. Nur Listenzeilen (tbody) scrollen dann noch normal.
+// Begrenzte Listenhoehe (eigene Scrollbox je Liste), auf normalen Seiten UND in PopUps:
+// jede Tabelle (.ekey-table) wird zur Laufzeit in einen Wrapper .ekey-table-scroll gelegt
+// (feste, kompakte max-height + overflow-y:auto, siehe style.css). Dadurch scrollt nur die
+// Liste selbst (ihre Zeilen) innerhalb dieser Box - Seitenueberschrift, Buttons und
+// Listenname stehen ausserhalb der Box und muessen nicht mitgescrollt werden. Die
+// Tabellenkopfzeile bleibt dank position:sticky (siehe .ekey-table th in style.css) oben in
+// dieser Box fixiert, die Zeilen (tbody) verschwinden beim Scrollen darunter.
 // ---------------------------------------------------------------------
 
-function ekeyMakeStickyBand(container, stopSelector, baseTop) {
-    var stopEl = container.querySelector(":scope > " + stopSelector);
-    if (!stopEl) return null;
-
-    var band = container.querySelector(":scope > .ekey-sticky-band");
-    if (!band) {
-        band = document.createElement("div");
-        band.className = "ekey-sticky-band";
-        container.insertBefore(band, container.firstChild);
-        var node = band.nextSibling;
-        while (node && node !== stopEl) {
-            var next = node.nextSibling;
-            band.appendChild(node);
-            node = next;
+function ekeyWrapTablesForScroll() {
+    document.querySelectorAll("table.ekey-table").forEach(function (table) {
+        var parent = table.parentNode;
+        if (parent && parent.classList && parent.classList.contains("ekey-table-scroll")) {
+            return; // bereits gewrappt
         }
-    }
-
-    if (!band.firstChild) {
-        // Nichts zu fixieren (Tabelle stand schon ganz am Anfang) - Wrapper wieder entfernen.
-        band.parentNode.removeChild(band);
-        return baseTop;
-    }
-
-    band.style.top = baseTop + "px";
-    return baseTop + band.getBoundingClientRect().height;
-}
-
-function ekeyLayoutStickyPanels(scopeEl, baseTop) {
-    // In manchen PopUps (z.B. [Abweichung], [Massnahmen], Checkliste-PopUp) steht die Tabelle
-    // ohne umschliessenden .ekey-panel direkt im PopUp-Koerper, mit einer Ueberschrift (h4/h2)
-    // und/oder einem Formular bzw. einer Button-Zeile davor. Damit auch dieser Bereich fixiert
-    // wird (wie bei den .ekey-panel-Listen auf den normalen Seiten), wird zuerst - genau wie auf
-    // Seitenebene bei .ekey-content - der Inhalt vor der ersten Tabelle bzw. dem ersten Panel
-    // innerhalb von scopeEl selbst in einen Sticky-Wrapper verschoben.
-    var leadingTop = ekeyMakeStickyBand(scopeEl, ".ekey-panel, :scope > table.ekey-table", baseTop);
-    var top = leadingTop === null ? baseTop : leadingTop;
-
-    scopeEl.querySelectorAll(".ekey-panel").forEach(function (panel) {
-        var theadTop = ekeyMakeStickyBand(panel, "table.ekey-table", top);
-        if (theadTop === null) return;
-        var table = panel.querySelector(":scope > table.ekey-table");
-        table.querySelectorAll("thead th").forEach(function (th) {
-            th.style.top = theadTop + "px";
-        });
-    });
-
-    // "Nackte" Tabelle direkt in scopeEl (nicht in einem .ekey-panel) - deren eigene Ueberschrift/
-    // Buttons wurden oben bereits per Sticky-Band fixiert, jetzt noch die Tabellenkopfzeile selbst
-    // auf die passende "top"-Position setzen (analog zur .ekey-table-th-Regel in style.css, hier
-    // aber mit dem dynamisch berechneten Offset statt nur "top: 0").
-    var bareTable = scopeEl.querySelector(":scope > table.ekey-table");
-    if (bareTable) {
-        bareTable.querySelectorAll("thead th").forEach(function (th) {
-            th.style.top = top + "px";
-        });
-    }
-}
-
-function ekeyUpdateStickyLayout() {
-    document.querySelectorAll(".ekey-content").forEach(function (content) {
-        ekeyLayoutStickyPanels(content, 0);
-    });
-    document.querySelectorAll(".ekey-modal-overlay.ekey-modal-open .ekey-modal-body").forEach(function (body) {
-        ekeyLayoutStickyPanels(body, 0);
+        var wrapper = document.createElement("div");
+        wrapper.className = "ekey-table-scroll";
+        parent.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
     });
 }
 
-document.addEventListener("DOMContentLoaded", ekeyUpdateStickyLayout);
-
-(function () {
-    var resizeTimer = null;
-    window.addEventListener("resize", function () {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(ekeyUpdateStickyLayout, 150);
-    });
-})();
+document.addEventListener("DOMContentLoaded", ekeyWrapTablesForScroll);
 
 // ---------------------------------------------------------------------
 // In allen Pop-up-Formularen (Dateneingabe) darf [Enter] das Pop-up nicht

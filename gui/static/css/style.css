@@ -186,16 +186,18 @@ a:hover { text-decoration: underline; }
   font-size: 10px;
 }
 
-/* ---------------- Sticky Bereiche (Seitenueberschrift, Buttons/Listennamen ueber Listen) ----------------
-   .ekey-sticky-band wird zur Laufzeit per JS (app.js: ekeyUpdateStickyLayout) um Seitenueberschrift +
-   darueber platzierte Buttons (in .ekey-content) sowie um Listennamen + Buttons vor einer Tabelle (in
-   jedem .ekey-panel) gelegt. So bleiben diese Bereiche beim Scrollen sichtbar fixiert, waehrend nur die
-   Listenzeilen darunter/dahinter scrollen - der "top"-Wert wird dynamisch anhand der tatsaechlichen
-   Hoehe der jeweils darueberliegenden fixierten Bereiche gesetzt (siehe app.js), nicht hier fest verdrahtet. */
-.ekey-sticky-band {
-  position: sticky;
-  z-index: 2;
-  background: #FFFFFF;
+/* ---------------- Begrenzte Listenhoehe (eigene Scrollbox je Liste) ----------------
+   .ekey-table-scroll wird zur Laufzeit per JS (app.js: ekeyWrapTablesForScroll) um jede Tabelle
+   (.ekey-table) gelegt. Die Box hat eine feste, kompakte maximale Hoehe mit eigenem Scrollbalken -
+   so scrollt nur die Liste selbst (ihre Zeilen) innerhalb dieser Box, nicht der gesamte
+   Arbeitsbereich bzw. das ganze PopUp. Seitenueberschrift, Buttons und Listenname stehen ausserhalb
+   dieser Box und muessen dadurch nicht mitgescrollt werden. Die Tabellenkopfzeile bleibt dank
+   position:sticky (siehe .ekey-table th) oben in dieser Box fixiert, die Zeilen verschwinden beim
+   Scrollen darunter. */
+.ekey-table-scroll {
+  max-height: 45vh;
+  overflow-y: auto;
+  overflow-x: auto;
 }
 
 /* ---------------- Headings ---------------- */
@@ -384,9 +386,10 @@ input:focus, select:focus, textarea:focus {
   text-align: left;
   padding: 6px 8px;
   border: 1px solid var(--ekey-border);
-  /* Ueberschrift der Liste bleibt beim Scrollen fix stehen, nur die Zeilen (tbody) scrollen -
-     wirkt automatisch relativ zum naechsten scrollenden Vorfahren (.ekey-content bei
-     Seiten-Listen, .ekey-modal-body bei PopUp-Listen - beide sind selbst overflow-y:auto). */
+  /* Kopfzeile der Liste bleibt beim Scrollen fix stehen, nur die Zeilen (tbody) scrollen -
+     wirkt automatisch relativ zum naechsten scrollenden Vorfahren: der zur Laufzeit per JS
+     um jede Tabelle gelegte .ekey-table-scroll-Wrapper (siehe dort), der eine feste, kompakte
+     Hoehe mit eigenem Scrollbalken hat. */
   position: sticky;
   top: 0;
   z-index: 1;
