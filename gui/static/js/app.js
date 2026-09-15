@@ -82,7 +82,21 @@ function ekeyRemoveAuditorRow(btn, containerId) {
 
 function ekeyOpenModal(id) {
     var overlay = document.getElementById(id);
-    if (overlay) overlay.classList.add("ekey-modal-open");
+    if (overlay) {
+        // Falls dieses PopUp per Kopfzeile verschiebbar ist (siehe weiter unten) und beim
+        // letzten Mal verschoben wurde, hier auf die urspruengliche (zentrierte) Position
+        // zuruecksetzen - sonst koennte es beim naechsten Oeffnen ausserhalb des sichtbaren
+        // Bereichs auftauchen.
+        var modal = overlay.querySelector(".ekey-modal-draggable");
+        if (modal) {
+            modal.style.position = "";
+            modal.style.margin = "";
+            modal.style.width = "";
+            modal.style.top = "";
+            modal.style.left = "";
+        }
+        overlay.classList.add("ekey-modal-open");
+    }
     // Falls der Inhalt dieses PopUps erst jetzt zum ersten Mal sichtbar wird, sicherheitshalber
     // erneut pruefen, ob alle Tabellen bereits in ihre Scrollbox gewrappt sind (siehe unten).
     ekeyWrapTablesForScroll();
@@ -108,6 +122,54 @@ document.addEventListener("click", function (e) {
 });
 
 // ---------------------------------------------------------------------
+// Seite "Audit durchfuehren", PopUp "Proof - Plan #...": das PopUp kann per Klick+Ziehen auf die
+// Kopfzeile (Ueberschrift) frei auf dem Bildschirm verschoben werden. Jedes .ekey-modal mit der
+// zusaetzlichen Klasse "ekey-modal-draggable" bekommt dieses Verhalten - ein Klick auf einen der
+// Buttons dort (z.B. "Speichern"/"Schliessen") loest dabei bewusst KEIN Verschieben aus, nur ein
+// Klick/Ziehen auf die restliche Kopfzeile (Titeltext, freie Flaeche). Die Position wird beim
+// naechsten Oeffnen wieder zurueckgesetzt (siehe ekeyOpenModal).
+// ---------------------------------------------------------------------
+
+(function () {
+    var aktivesModal = null;
+    var startX = 0, startY = 0, startTop = 0, startLeft = 0;
+
+    document.addEventListener("mousedown", function (e) {
+        var header = e.target.closest(".ekey-modal-draggable > .ekey-modal-header");
+        if (!header) return;
+        if (e.target.closest("button")) return;
+
+        var modal = header.parentElement;
+        var rect = modal.getBoundingClientRect();
+        // Aus dem zentrierten Flex-Layout des Overlays herausloesen und auf die aktuelle Position
+        // "einfrieren" (als feste Pixelwerte), damit das PopUp ab jetzt frei per Maus positioniert
+        // werden kann.
+        modal.style.position = "fixed";
+        modal.style.margin = "0";
+        modal.style.width = rect.width + "px";
+        modal.style.top = rect.top + "px";
+        modal.style.left = rect.left + "px";
+
+        aktivesModal = modal;
+        startX = e.clientX;
+        startY = e.clientY;
+        startTop = rect.top;
+        startLeft = rect.left;
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function (e) {
+        if (!aktivesModal) return;
+        aktivesModal.style.top = (startTop + (e.clientY - startY)) + "px";
+        aktivesModal.style.left = (startLeft + (e.clientX - startX)) + "px";
+    });
+
+    document.addEventListener("mouseup", function () {
+        aktivesModal = null;
+    });
+})();
+
+// ---------------------------------------------------------------------
 // Begrenzte Listenhoehe (eigene Scrollbox je Liste), auf normalen Seiten UND in PopUps:
 // jede Tabelle (.ekey-table) wird zur Laufzeit in einen Wrapper .ekey-table-scroll gelegt
 // (feste, kompakte max-height + overflow-y:auto, siehe style.css). Dadurch scrollt nur die
@@ -131,6 +193,41 @@ function ekeyWrapTablesForScroll() {
 }
 
 document.addEventListener("DOMContentLoaded", ekeyWrapTablesForScroll);
+
+// ---------------------------------------------------------------------
+// Seite "Audit durchfuehren", PopUp "Proof": Checkbox "Proof nicht bewerten" (Panel
+// "Ergebnis erfassen") deaktiviert bei Aktivierung das Kombinationslistenfeld "Punkte" und
+// leert eine evtl. bereits getroffene Auswahl, da fuer diesen Proof dann keine Punkte mehr
+// vergeben werden koennen (serverseitig wird dies zusaetzlich erzwungen, siehe
+// database.py: add_audit_result).
+// ---------------------------------------------------------------------
+
+function ekeyToggleNichtBewerten(checkbox, punkteSelectId) {
+    var select = document.getElementById(punkteSelectId);
+    if (!select) return;
+    if (checkbox.checked) {
+        select.value = "";
+        select.style.color = "";
+        select.disabled = true;
+    } else {
+        select.disabled = false;
+    }
+}
+
+// ---------------------------------------------------------------------
+// Seite "Audit durchfuehren", PopUp "Proof", Bereich "Anhaenge": ueber den Button
+// "Datei auswaehlen..." kann der Datei-Explorer des Betriebssystems geoeffnet werden. Aus
+// Sicherheitsgruenden liefert der Browser dabei NUR den Dateinamen (nicht den vollstaendigen
+// Ordnerpfad) - dieser wird in das Textfeld uebernommen und kann dort bei Bedarf noch von Hand
+// zu einem vollstaendigen Pfad ergaenzt werden. Alternativ kann weiterhin ein beliebiger Pfad/
+// eine Referenz direkt eingetippt werden, ohne die Dateiauswahl zu verwenden.
+// ---------------------------------------------------------------------
+
+function ekeyDateiNameInFeld(fileInput, zielFeldId) {
+    var zielFeld = document.getElementById(zielFeldId);
+    if (!zielFeld || !fileInput.files || !fileInput.files[0]) return;
+    zielFeld.value = fileInput.files[0].name;
+}
 
 // ---------------------------------------------------------------------
 // In allen Pop-up-Formularen (Dateneingabe) darf [Enter] das Pop-up nicht

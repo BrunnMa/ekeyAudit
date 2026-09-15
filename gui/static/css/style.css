@@ -255,6 +255,17 @@ a:hover { text-decoration: underline; }
   padding: 2px 6px;
 }
 .ekey-btn-block { width: 100%; }
+/* Roetlicher Button (z.B. "Abweichung erfassen" im PopUp "Proof"): Rahmen + Schrift in der
+   Fehlerfarbe, Flaeche bleibt wie bei einem normalen Button - erst beim Hover fuellt sich der
+   Button rot (analog zum Hover-Verhalten von .ekey-btn). */
+.ekey-btn-danger {
+  border-color: var(--ekey-error);
+  color: var(--ekey-error);
+}
+.ekey-btn-danger:hover {
+  background: var(--ekey-error);
+  color: #FFFFFF;
+}
 
 /* ---------------- Forms ---------------- */
 form { margin: 0; }
@@ -296,6 +307,10 @@ input:focus, select:focus, textarea:focus {
 .ekey-form-actions { margin-top: 8px; display: flex; gap: 8px; }
 .ekey-inline-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .ekey-inline-form input, .ekey-inline-form select { width: auto; min-width: 120px; }
+/* Variante fuer einzelne Formulare (z.B. "Links"/"Anhaenge" im PopUp "Proof"): das Eingabefeld
+   nimmt die gesamte verfuegbare Breite ein, wodurch der/die Button(s) dahinter automatisch an
+   den rechten Rand des Bereichs rutschen, statt direkt am Feld zu kleben. */
+.ekey-inline-form-grow input[type="text"] { flex: 1 1 auto; min-width: 0; }
 .ekey-checkbox-label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
 .ekey-checkbox-label input[type="checkbox"] { width: auto; }
 .ekey-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--ekey-border); border-radius: 4px; padding: 8px; }
@@ -594,6 +609,10 @@ input:focus, select:focus, textarea:focus {
   flex: 0 0 auto;
 }
 .ekey-modal-header h2 { margin: 0; border: none; padding: 0; }
+/* PopUp "Proof - Plan #..." (Seite "Audit durchfuehren"): per JS (app.js) auf die Kopfzeile
+   dieses PopUps ziehen, um es frei zu verschieben - der Mauszeiger signalisiert das schon beim
+   Ueberfahren der Kopfzeile (ausser ueber den Buttons dort, die behalten ihren eigenen Zeiger). */
+.ekey-modal-draggable > .ekey-modal-header { cursor: move; }
 .ekey-modal-close {
   background: none;
   border: 1px solid transparent;

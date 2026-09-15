@@ -278,7 +278,8 @@ SCHEMA_STATEMENTS = [
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         auditProofsId INTEGER,
         auditChecklisteID INTEGER,
-        anhang TEXT
+        anhang TEXT,
+        gespeicherterDateiname TEXT
     )
     """,
     """
@@ -308,6 +309,7 @@ SCHEMA_STATEMENTS = [
         antwort TEXT,
         antwortZurFrage TEXT,
         punkte INTEGER,
+        nichtBewerten INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (auditProofsId) REFERENCES STG_QM_AuditProofs(id),
         FOREIGN KEY (auditBewertungID) REFERENCES Look_QM_AuditBewertung(id)
     )
@@ -536,7 +538,8 @@ SCHEMA_STATEMENTS_MSSQL = [
         id INT IDENTITY(1,1) PRIMARY KEY,
         auditProofsId INT,
         auditChecklisteID INT,
-        anhang NVARCHAR(MAX)
+        anhang NVARCHAR(MAX),
+        gespeicherterDateiname NVARCHAR(255)
     """),
     ("STG_QM_AuditLink", """
         id INT IDENTITY(1,1) PRIMARY KEY,
@@ -560,6 +563,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         antwort NVARCHAR(MAX),
         antwortZurFrage NVARCHAR(MAX),
         punkte INT,
+        nichtBewerten BIT NOT NULL DEFAULT 0,
         FOREIGN KEY (auditProofsId) REFERENCES STG_QM_AuditProofs(id),
         FOREIGN KEY (auditBewertungID) REFERENCES Look_QM_AuditBewertung(id)
     """),
@@ -652,6 +656,8 @@ def init_db():
     _migrate_checkliste_proof_reihenfolge_column()
     _migrate_auditproofs_reihenfolge_column()
     _migrate_auditresult_punkte_column()
+    _migrate_auditresult_nicht_bewerten_column()
+    _migrate_anhang_dateiname_column()
     _migrate_auditresult_rename_info_column()
     _migrate_massnahme_status_column()
     _migrate_auditplanstatus_in_arbeit()
@@ -835,6 +841,50 @@ def _migrate_auditresult_punkte_column():
                 cur.execute("ALTER TABLE dbo.STG_QM_AuditResult ADD punkte INT")
             else:
                 cur.execute("ALTER TABLE STG_QM_AuditResult ADD COLUMN punkte INTEGER")
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_auditresult_nicht_bewerten_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditResult.nichtBewerten: Checkbox 'Proof nicht
+    bewerten' im PopUp 'Proof' (Audit durchfuehren, Panel 'Ergebnis erfassen') - ist sie gesetzt,
+    koennen fuer diesen Proof keine Punkte vergeben werden (siehe add_audit_result) und der Proof
+    wird bei den Kennzahlenberechnungen (kpi.py) nicht beruecksichtigt. Bei einer bereits
+    bestehenden Datenbank wird die Spalte per ALTER TABLE ergaenzt (Standardwert 0/nicht gesetzt),
+    bei Neuinstallationen enthaelt CREATE TABLE die Spalte bereits, hier passiert dann nichts."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditResult", "nichtBewerten"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditResult ADD nichtBewerten BIT NOT NULL DEFAULT 0")
+            else:
+                cur.execute(
+                    "ALTER TABLE STG_QM_AuditResult ADD COLUMN nichtBewerten INTEGER NOT NULL DEFAULT 0"
+                )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_anhang_dateiname_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditAnhang.gespeicherterDateiname: im PopUp
+    'Proof' (Audit durchfuehren, Bereich 'Anhaenge') kann statt einer reinen Text-Referenz auch
+    tatsaechlich eine Datei hochgeladen werden - sie wird unter einem eindeutigen Namen im Ordner
+    config.UPLOAD_DIR abgelegt, dieser Name wird hier gespeichert (siehe routes.py:
+    audit_proof_anhang_add). Ist die Spalte NULL, handelt es sich um eine reine Text-Referenz wie
+    bisher (kein Download moeglich, siehe list_anhaenge/Template). Bei einer bereits bestehenden
+    Datenbank wird die Spalte per ALTER TABLE ergaenzt, bei Neuinstallationen enthaelt CREATE
+    TABLE die Spalte bereits, hier passiert dann nichts."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditAnhang", "gespeicherterDateiname"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditAnhang ADD gespeicherterDateiname NVARCHAR(255)")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditAnhang ADD COLUMN gespeicherterDateiname TEXT")
             conn.commit()
     finally:
         conn.close()
@@ -1979,7 +2029,11 @@ def list_proofs_for_plan(plan_id):
                (SELECT r.punkte FROM STG_QM_AuditResult r
                     WHERE r.auditProofsId = pf.id
                       AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
-               ) AS letztePunkte
+               ) AS letztePunkte,
+               (SELECT r.nichtBewerten FROM STG_QM_AuditResult r
+                    WHERE r.auditProofsId = pf.id
+                      AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
+               ) AS letzteNichtBewerten
         FROM STG_QM_AuditProofs pf
         WHERE pf.auditPlanId = ?
         ORDER BY pf.reihenfolge, pf.id
@@ -2006,26 +2060,36 @@ def get_result_for_proof(proof_id):
     return results[0] if results else None
 
 
-def add_audit_result(proof_id, name_auditor, datum, antwort_zur_frage="", punkte=None):
+def add_audit_result(proof_id, name_auditor, datum, antwort_zur_frage="", punkte=None, nicht_bewerten=False):
     """Erfasst/aktualisiert das (einzige) Ergebnis zu einem Proof (PopUp 'Proof' unter 'Audit
     durchfuehren'): Auditor(en) - als ein mit '; ' verbundener Text - , Datum, Antwort zur Frage
-    (Richtext) und Punkte. Pro Proof ist nur eine Bewertung vorgesehen: existiert bereits ein
-    Ergebnis, wird es aktualisiert statt ein weiteres anzulegen - ueber [Bearbeiten] kann die
-    Bewertung danach jederzeit erneut veraendert werden. Die Klassifizierung (Bewertung:
-    Konform/Abweichung/Empfehlung) wird hier bewusst NICHT erfasst, sondern erst beim Erfassen
-    einer Abweichung zu diesem Ergebnis nachtraeglich gesetzt (siehe update_result_bewertung)."""
+    (Richtext), Punkte und die Checkbox 'Proof nicht bewerten' (nicht_bewerten). Pro Proof ist nur
+    eine Bewertung vorgesehen: existiert bereits ein Ergebnis, wird es aktualisiert statt ein
+    weiteres anzulegen - ueber [Bearbeiten] kann die Bewertung danach jederzeit erneut veraendert
+    werden. Die Klassifizierung (Bewertung: Konform/Abweichung/Empfehlung) wird hier bewusst NICHT
+    erfasst, sondern erst beim Erfassen einer Abweichung zu diesem Ergebnis nachtraeglich gesetzt
+    (siehe update_result_bewertung).
+
+    Ist nicht_bewerten gesetzt, koennen fuer diesen Proof keine Punkte vergeben werden - punkte
+    wird hier serverseitig (unabhaengig davon, was das Formular liefert) auf None erzwungen, damit
+    ein deaktiviertes/uebersprungenes Feld im Browser keine Umgehung ermoeglicht. Dadurch wird der
+    Proof automatisch von allen Punkte-basierten Kennzahlenberechnungen ausgeschlossen (siehe
+    kpi.py: alle betroffenen Abfragen filtern bereits auf "punkte IS NOT NULL")."""
+    if nicht_bewerten:
+        punkte = None
+    nicht_bewerten_wert = 1 if nicht_bewerten else 0
     bestehendes = get_result_for_proof(proof_id)
     if bestehendes:
         execute("""
-            UPDATE STG_QM_AuditResult SET nameAuditor=?, datumerfasst=?, antwortZurFrage=?, punkte=?
+            UPDATE STG_QM_AuditResult SET nameAuditor=?, datumerfasst=?, antwortZurFrage=?, punkte=?, nichtBewerten=?
             WHERE id=?
-        """, (name_auditor, datum, antwort_zur_frage, punkte, bestehendes["id"]))
+        """, (name_auditor, datum, antwort_zur_frage, punkte, nicht_bewerten_wert, bestehendes["id"]))
         return bestehendes["id"]
     return execute("""
         INSERT INTO STG_QM_AuditResult
-        (auditProofsId, nameAuditor, datumerfasst, antwortZurFrage, punkte)
-        VALUES (?, ?, ?, ?, ?)
-    """, (proof_id, name_auditor, datum, antwort_zur_frage, punkte))
+        (auditProofsId, nameAuditor, datumerfasst, antwortZurFrage, punkte, nichtBewerten)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (proof_id, name_auditor, datum, antwort_zur_frage, punkte, nicht_bewerten_wert))
 
 
 def get_result(result_id):
@@ -2036,9 +2100,18 @@ def update_result_bewertung(result_id, bewertung_id):
     execute("UPDATE STG_QM_AuditResult SET auditBewertungID=? WHERE id=?", (bewertung_id, result_id))
 
 
-def add_anhang(proof_id, checkliste_id, anhang):
-    return execute("INSERT INTO STG_QM_AuditAnhang (auditProofsId, auditChecklisteID, anhang) VALUES (?, ?, ?)",
-                   (proof_id, checkliste_id, anhang))
+def add_anhang(proof_id, checkliste_id, anhang, gespeicherter_dateiname=None):
+    """Legt eine Zeile in 'Anhaenge' an (PopUp 'Proof' unter 'Audit durchfuehren'). anhang ist der
+    Anzeigetext (bei einer hochgeladenen Datei: deren urspruenglicher Dateiname, bei einer reinen
+    Text-Referenz: der eingegebene Pfad/die Referenz selbst). gespeicherter_dateiname ist NUR bei
+    einer tatsaechlich hochgeladenen Datei gesetzt - der Name, unter dem sie in config.UPLOAD_DIR
+    liegt (siehe routes.py: audit_proof_anhang_add) - und macht den Eintrag in der Liste als Link
+    oeffenbar/herunterladbar (siehe get_anhang/delete_anhang sowie das Template)."""
+    return execute(
+        "INSERT INTO STG_QM_AuditAnhang (auditProofsId, auditChecklisteID, anhang, gespeicherterDateiname) "
+        "VALUES (?, ?, ?, ?)",
+        (proof_id, checkliste_id, anhang, gespeicherter_dateiname)
+    )
 
 
 def add_link(proof_id, checkliste_id, link):
@@ -2052,6 +2125,39 @@ def list_anhaenge(proof_id):
 
 def list_links(proof_id):
     return query("SELECT * FROM STG_QM_AuditLink WHERE auditProofsId = ? ORDER BY id", (proof_id,))
+
+
+def get_anhang(anhang_id):
+    return query("SELECT * FROM STG_QM_AuditAnhang WHERE id = ?", (anhang_id,), fetchone=True)
+
+
+def delete_anhang(anhang_id):
+    """Loescht einen Anhang-Eintrag (PopUp 'Proof', Bereich 'Anhaenge'). Die evtl. zugehoerige,
+    tatsaechlich hochgeladene Datei in config.UPLOAD_DIR wird NICHT hier, sondern vom Aufrufer
+    (routes.py: audit_anhang_delete) von der Festplatte geloescht - dort ist bereits config
+    importiert und der Dateisystemzugriff (os.remove) besser aufgehoben als in database.py, das
+    sich sonst nur um die Datenbank kuemmert. Gibt die zugehoerige auditProofsId zurueck (fuer den
+    Redirect zurueck zum richtigen Proof), oder None falls der Eintrag nicht existiert."""
+    row = get_anhang(anhang_id)
+    if not row:
+        return None
+    execute("DELETE FROM STG_QM_AuditAnhang WHERE id = ?", (anhang_id,))
+    return row["auditProofsId"]
+
+
+def get_link(link_id):
+    return query("SELECT * FROM STG_QM_AuditLink WHERE id = ?", (link_id,), fetchone=True)
+
+
+def delete_link(link_id):
+    """Loescht einen Link-Eintrag (PopUp 'Proof', Bereich 'Links'). Gibt die zugehoerige
+    auditProofsId zurueck (fuer den Redirect zurueck zum richtigen Proof), oder None falls der
+    Eintrag nicht existiert."""
+    row = get_link(link_id)
+    if not row:
+        return None
+    execute("DELETE FROM STG_QM_AuditLink WHERE id = ?", (link_id,))
+    return row["auditProofsId"]
 
 
 def add_interview(proof_id, name_auditor, inhalt):

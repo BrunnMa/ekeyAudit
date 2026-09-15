@@ -14,7 +14,9 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
     session, send_file, abort, jsonify
 )
+from werkzeug.utils import secure_filename
 
+import config
 import database as db
 import security
 import kpi
@@ -748,9 +750,10 @@ def audit_result_add(proof_id):
         punkte = int(punkte_raw) if punkte_raw not in (None, "") else None
     except ValueError:
         punkte = None
+    nicht_bewerten = request.form.get("nichtBewerten") in ("1", "on", "true", "True")
     datum = request.form.get("datumerfasst") or datetime.now().strftime("%Y-%m-%d")
     antwort = request.form.get("antwortZurFrage", "")
-    db.add_audit_result(proof_id, "; ".join(auditoren), datum, antwort, punkte)
+    db.add_audit_result(proof_id, "; ".join(auditoren), datum, antwort, punkte, nicht_bewerten=nicht_bewerten)
     flash("Ergebnis erfasst.", "success")
     return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
 
@@ -771,14 +774,82 @@ def audit_proof_link_add(proof_id):
 @gui.route("/audit-durchfuehren/proof/<int:proof_id>/anhang/add", methods=["POST"])
 @security.login_required
 def audit_proof_anhang_add(proof_id):
+    """Bereich 'Anhaenge' im PopUp 'Proof': entweder wird ueber den Button 'Datei auswaehlen...'
+    tatsaechlich eine Datei hochgeladen (wird unter einem eindeutigen Namen in config.UPLOAD_DIR
+    abgelegt und kann danach ueber die Liste per Klick geoeffnet werden, siehe
+    audit_anhang_download), oder es wird nur eine reine Text-Referenz (z.B. ein Netzlaufwerk-Pfad)
+    ohne Datei eingetragen - dann wie bisher nur als Text in der Liste sichtbar, ohne Link."""
     proof = db.get_proof(proof_id)
     if not proof:
         abort(404)
-    anhang = request.form.get("anhang", "").strip()
-    if anhang:
-        db.add_anhang(proof_id, proof.get("auditChecklisteID"), anhang)
+    datei = request.files.get("anhangDatei")
+    anhang_text = request.form.get("anhang", "").strip()
+
+    if datei and datei.filename:
+        dateiname_sicher = secure_filename(datei.filename)
+        if not dateiname_sicher:
+            flash("Der Dateiname ist ungueltig.", "error")
+            return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
+        gespeicherter_name = f"{uuid.uuid4().hex}_{dateiname_sicher}"
+        datei.save(os.path.join(config.UPLOAD_DIR, gespeicherter_name))
+        anzeige_text = anhang_text or datei.filename
+        db.add_anhang(proof_id, proof.get("auditChecklisteID"), anzeige_text, gespeicherter_dateiname=gespeicherter_name)
+        flash("Datei hochgeladen.", "success")
+    elif anhang_text:
+        db.add_anhang(proof_id, proof.get("auditChecklisteID"), anhang_text)
         flash("Anhang-Referenz hinzugefuegt.", "success")
+    else:
+        flash("Bitte einen Pfad/eine Referenz eingeben oder eine Datei auswaehlen.", "error")
+
     return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id))
+
+
+@gui.route("/audit-durchfuehren/anhang/<int:anhang_id>/download")
+@security.login_required
+def audit_anhang_download(anhang_id):
+    """Oeffnet/laedt eine tatsaechlich hochgeladene Anhang-Datei (siehe audit_proof_anhang_add).
+    Reine Text-Referenzen (gespeicherterDateiname ist NULL) haben keine Datei und liefern 404 -
+    das Template verlinkt fuer solche Eintraege konsequenterweise auch gar nicht erst hierher."""
+    anhang = db.get_anhang(anhang_id)
+    if not anhang or not anhang.get("gespeicherterDateiname"):
+        abort(404)
+    pfad = os.path.join(config.UPLOAD_DIR, anhang["gespeicherterDateiname"])
+    if not os.path.exists(pfad):
+        abort(404)
+    return send_file(pfad, as_attachment=False, download_name=anhang.get("anhang") or anhang["gespeicherterDateiname"])
+
+
+@gui.route("/audit-durchfuehren/anhang/<int:anhang_id>/delete", methods=["POST"])
+@security.login_required
+def audit_anhang_delete(anhang_id):
+    anhang = db.get_anhang(anhang_id)
+    if not anhang:
+        abort(404)
+    proof = db.get_proof(anhang["auditProofsId"])
+    if not proof:
+        abort(404)
+    gespeicherter_name = anhang.get("gespeicherterDateiname")
+    proof_id_zurueck = db.delete_anhang(anhang_id)
+    if gespeicherter_name:
+        pfad = os.path.join(config.UPLOAD_DIR, gespeicherter_name)
+        if os.path.exists(pfad):
+            os.remove(pfad)
+    flash("Anhang geloescht.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id_zurueck))
+
+
+@gui.route("/audit-durchfuehren/link/<int:link_id>/delete", methods=["POST"])
+@security.login_required
+def audit_link_delete(link_id):
+    link = db.get_link(link_id)
+    if not link:
+        abort(404)
+    proof = db.get_proof(link["auditProofsId"])
+    if not proof:
+        abort(404)
+    proof_id_zurueck = db.delete_link(link_id)
+    flash("Link geloescht.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"], proofOpen=proof_id_zurueck))
 
 
 @gui.route("/audit-durchfuehren/proof/<int:proof_id>/interview/add", methods=["POST"])

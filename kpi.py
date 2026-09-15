@@ -218,21 +218,27 @@ def massnahmen_je_status_gruppe():
 def auditproofs_kennzahlen():
     """AuditProofs-Aufschluesselung fuer die Dashboard-Hauptkachel 'AuditProofs': offen (noch
     kein Ergebnis erfasst), Punkte 0 (Ergebnis erfasst, aber noch nicht bewertet - punkte NULL),
-    Punkte 1-4 (Anzahl je Punktwert) und erledigt (Summe Punkte 1-4, d.h. bewertet)."""
+    Punkte 1-4 (Anzahl je Punktwert), erledigt (Summe Punkte 1-4, d.h. bewertet) und ausgeschlossen
+    (Checkbox 'Proof nicht bewerten' gesetzt, siehe STG_QM_AuditResult.nichtBewerten - diese
+    Proofs fliessen bewusst in KEINEN der anderen Buckets ein, insbesondere nicht in 'offen' oder
+    'Punkte 0', da sie ja bereits erfasst sind, nur eben absichtlich nicht bewertet werden)."""
     row = db.query("""
         SELECT
             SUM(CASE WHEN r.id IS NULL THEN 1 ELSE 0 END) AS offen,
-            SUM(CASE WHEN r.id IS NOT NULL AND r.punkte IS NULL THEN 1 ELSE 0 END) AS punkte_0,
+            SUM(CASE WHEN r.id IS NOT NULL AND r.punkte IS NULL
+                     AND (r.nichtBewerten IS NULL OR r.nichtBewerten = 0) THEN 1 ELSE 0 END) AS punkte_0,
             SUM(CASE WHEN r.punkte = 1 THEN 1 ELSE 0 END) AS punkte_1,
             SUM(CASE WHEN r.punkte = 2 THEN 1 ELSE 0 END) AS punkte_2,
             SUM(CASE WHEN r.punkte = 3 THEN 1 ELSE 0 END) AS punkte_3,
             SUM(CASE WHEN r.punkte = 4 THEN 1 ELSE 0 END) AS punkte_4,
-            SUM(CASE WHEN r.punkte IS NOT NULL THEN 1 ELSE 0 END) AS erledigt
+            SUM(CASE WHEN r.punkte IS NOT NULL THEN 1 ELSE 0 END) AS erledigt,
+            SUM(CASE WHEN r.nichtBewerten = 1 THEN 1 ELSE 0 END) AS ausgeschlossen
         FROM STG_QM_AuditProofs pf
         LEFT JOIN STG_QM_AuditResult r ON r.auditProofsId = pf.id
     """, fetchone=True)
     if not row:
-        return {"offen": 0, "punkte_0": 0, "punkte_1": 0, "punkte_2": 0, "punkte_3": 0, "punkte_4": 0, "erledigt": 0}
+        return {"offen": 0, "punkte_0": 0, "punkte_1": 0, "punkte_2": 0, "punkte_3": 0, "punkte_4": 0,
+                "erledigt": 0, "ausgeschlossen": 0}
     return {
         "offen": row["offen"] or 0,
         "punkte_0": row["punkte_0"] or 0,
@@ -241,6 +247,7 @@ def auditproofs_kennzahlen():
         "punkte_3": row["punkte_3"] or 0,
         "punkte_4": row["punkte_4"] or 0,
         "erledigt": row["erledigt"] or 0,
+        "ausgeschlossen": row["ausgeschlossen"] or 0,
     }
 
 
