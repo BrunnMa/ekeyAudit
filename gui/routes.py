@@ -2,13 +2,16 @@
 gui/routes.py - Alle Flask-Routen der ekeyAudit-Anwendung (ein Blueprint 'gui').
 """
 
+import html
 import itertools
 import os
+import re
 import tempfile
 import threading
 import time
 import uuid
 from datetime import datetime
+from io import BytesIO
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
@@ -735,6 +738,112 @@ def audit_durchfuehren_detail(plan_id):
         massnahmen_abweichung_open_id=massnahmen_abweichung_open_id,
         heute=datetime.now().strftime("%Y-%m-%d"),
         detail_mode=True,
+    )
+
+
+def _richtext_zu_text(wert):
+    """Wandelt ein per Richtext-Editor erfasstes Feld (z.B. STG_QM_AuditProofs.auditFrage, im
+    Template ueber '| safe' als HTML ausgegeben) in reinen Klartext um - fuer den Excel-Export
+    der Liste 'Proofs', wo eine Zelle keine HTML-Tags anzeigen soll. Kein vollwertiger HTML-
+    Parser, sondern eine bewusst einfache Umwandlung: Zeilenumbruch-erzeugende Tags werden zu
+    echten Zeilenumbruechen, alle uebrigen Tags werden entfernt, HTML-Entities (z.B. &amp;)
+    aufgeloest."""
+    if not wert:
+        return ""
+    text = re.sub(r"<br\s*/?>", "\n", wert, flags=re.IGNORECASE)
+    text = re.sub(r"</p\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</li\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(text).strip()
+
+
+def _dateiname_teil(wert):
+    """Bereinigt einen Textbaustein fuer einen Export-Dateinamen (z.B. Auditprogramm-Typ,
+    Fachbereich-Name) von Zeichen, die in Dateinamen problematisch sind (Windows: \\ / : * ? " <
+    > |). Umlaute/Leerzeichen bleiben bewusst erhalten (anders als werkzeug.secure_filename,
+    das fuer tatsaechliche Datei-Uploads gedacht ist und Umlaute komplett entfernt)."""
+    wert = re.sub(r'[\\/:*?"<>|]', "_", str(wert or "").strip())
+    return re.sub(r"\s+", " ", wert)
+
+
+def _proofs_export_dateiname(plan):
+    """Dateiname fuer den Excel-Export der Liste 'Proofs' (Seite 'Audit durchfuehren'):
+    Auditprogramm (Jahr + Typ) + Fachbereich + heutiges Datum, z.B.
+    '2026 Intern - QM - 2026-09-16.xlsx'."""
+    programm = db.get_audit_programm(plan.get("auditProgrammId")) if plan.get("auditProgrammId") else None
+    jahr = programm.get("auditJahr") if programm else None
+    typ = programm.get("auditTyp") if programm else None
+
+    fachbereich_name = None
+    fachbereich_id = plan.get("fachbereich")
+    if fachbereich_id not in (None, ""):
+        try:
+            fachbereich_map = db.get_lookup_map("Look_QM_Fachbereich", "id", "fachbereich")
+            fachbereich_name = fachbereich_map.get(int(fachbereich_id))
+        except (ValueError, TypeError):
+            fachbereich_name = None
+
+    auditprogramm_teil = " ".join(_dateiname_teil(t) for t in (jahr, typ) if t)
+    heute = datetime.now().strftime("%Y-%m-%d")
+    segmente = [s for s in (auditprogramm_teil, _dateiname_teil(fachbereich_name), heute) if s]
+    return " - ".join(segmente) + ".xlsx"
+
+
+@gui.route("/audit-durchfuehren/<int:plan_id>/proofs/export")
+@security.login_required
+def audit_durchfuehren_proofs_export(plan_id):
+    """Liste 'Proofs' (Seite 'Audit durchfuehren') als .xlsx-Datei exportieren - alle Spalten,
+    identisch zu den Spalten der Liste auf der Seite selbst (Frage/Norm-Kapitel/Bewertung/
+    Abw./Massn.), ergaenzt um Antwort zur Frage/Auditor/Datum der jeweils letzten Bewertung
+    je Proof (aus list_proofs_for_plan, letzteAntwortZurFrage/letzterAuditor/letztesDatum)."""
+    plan = db.get_audit_plan(plan_id)
+    if not plan:
+        abort(404)
+    proofs = db.list_proofs_for_plan(plan_id)
+    kennzahlen = db.proof_export_kennzahlen(plan_id)
+
+    import openpyxl
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Proofs"
+    ws.append(["Frage", "Norm-Kapitel", "Bewertung", "Abw.", "Maßn.", "Antwort zur Frage", "Auditor", "Datum"])
+    for zelle in ws[1]:
+        zelle.font = Font(bold=True)
+
+    for pf in proofs:
+        abw_anzahl, massn_anzahl = kennzahlen.get(pf["id"], (0, 0))
+        if pf.get("letzteNichtBewerten"):
+            bewertung = "von Bewertung ausgeschlossen"
+        elif pf.get("letztePunkte") is not None:
+            bewertung = pf["letztePunkte"]
+        else:
+            bewertung = "-"
+        ws.append([
+            _richtext_zu_text(pf.get("auditFrage")),
+            pf.get("normKapitel") or "",
+            bewertung,
+            abw_anzahl,
+            massn_anzahl,
+            _richtext_zu_text(pf.get("letzteAntwortZurFrage")),
+            pf.get("letzterAuditor") or "",
+            pf.get("letztesDatum") or "",
+        ])
+        for spalte in (1, 6):
+            ws.cell(row=ws.max_row, column=spalte).alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top")
+
+    for spalte, breite in zip(range(1, 9), (60, 20, 24, 8, 8, 60, 20, 14)):
+        ws.column_dimensions[get_column_letter(spalte)].width = breite
+
+    puffer = BytesIO()
+    wb.save(puffer)
+    puffer.seek(0)
+    dateiname = _proofs_export_dateiname(plan)
+    return send_file(
+        puffer, as_attachment=True, download_name=dateiname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 

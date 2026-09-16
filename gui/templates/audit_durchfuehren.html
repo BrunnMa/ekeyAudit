@@ -30,10 +30,11 @@
 
     <div class="ekey-panel">
         <div class="ekey-form-actions" style="justify-content: flex-end; margin-bottom: 8px;">
+            <a href="{{ url_for('gui.audit_durchfuehren_proofs_export', plan_id=plan.id) }}" class="ekey-btn" download>ExcelExport</a>
             <a href="{{ url_for('gui.audit_durchfuehren', programmId=plan.auditProgrammId) }}" class="ekey-btn">Zurueck zur Uebersicht</a>
         </div>
         <h2 class="ekey-h2">Proofs</h2>
-        <table class="ekey-table">
+        <table class="ekey-table ekey-table-full-height">
             <thead><tr><th>Frage</th><th>Norm-Kapitel</th><th>Bewertung</th><th>Abw.</th><th>Ma&szlig;n.</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for pf in proofs %}

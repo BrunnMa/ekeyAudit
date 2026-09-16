@@ -34,6 +34,11 @@ document.addEventListener("click", function (e) {
     if (!link || link.target === "_blank") return;
     var href = link.getAttribute("href") || "";
     if (href.indexOf("mailto:") === 0 || href.indexOf("tel:") === 0 || href.indexOf("#") === 0) return;
+    // Download-Links (z.B. "ExcelExport") loesen KEINE echte Seitennavigation aus - die Datei
+    // wird nur heruntergeladen, die aktuelle Seite bleibt bestehen. Die Ladeanzeige wuerde sich
+    // in diesem Fall nie wieder ausblenden (das passiert sonst automatisch beim Laden der
+    // naechsten Seite), deshalb hier bewusst nicht einblenden.
+    if (link.hasAttribute("download")) return;
     ekeyShowLoadingOverlay();
 });
 
@@ -83,23 +88,35 @@ function ekeyRemoveAuditorRow(btn, containerId) {
 function ekeyOpenModal(id) {
     var overlay = document.getElementById(id);
     if (overlay) {
-        // Falls dieses PopUp per Kopfzeile verschiebbar ist (siehe weiter unten) und beim
-        // letzten Mal verschoben wurde, hier auf die urspruengliche (zentrierte) Position
-        // zuruecksetzen - sonst koennte es beim naechsten Oeffnen ausserhalb des sichtbaren
-        // Bereichs auftauchen.
-        var modal = overlay.querySelector(".ekey-modal-draggable");
+        // Verschieben (nur bei .ekey-modal-draggable, siehe weiter unten) und Groesse-Aendern
+        // (bei jedem PopUp, siehe ekeyAddResizeHandles) werden beim erneuten Oeffnen auf den
+        // Ausgangszustand zurueckgesetzt - sonst koennte ein PopUp verschoben/verzerrt "verloren"
+        // bleiben, wenn es zuvor per Ziehen bewegt oder in der Groesse veraendert wurde.
+        var modal = overlay.querySelector(".ekey-modal");
         if (modal) {
             modal.style.position = "";
             modal.style.margin = "";
-            modal.style.width = "";
             modal.style.top = "";
             modal.style.left = "";
+            modal.style.width = "";
+            modal.style.maxWidth = "";
+            modal.style.height = "";
+            modal.style.maxHeight = "";
+            // Listen (Tabellen) innerhalb des PopUps wachsen beim Ziehen am Resize-Griff mit
+            // (siehe die Resize-IIFE weiter unten) - deren dabei gesetzte feste Hoehe wird hier
+            // ebenfalls zurueckgesetzt, damit sie beim naechsten Oeffnen wieder mit der normalen,
+            // kompakten Standardhoehe (siehe .ekey-table-scroll in style.css) startet.
+            modal.querySelectorAll(".ekey-table-scroll:not(.ekey-table-scroll-full)").forEach(function (liste) {
+                liste.style.height = "";
+                liste.style.maxHeight = "";
+            });
         }
         overlay.classList.add("ekey-modal-open");
     }
     // Falls der Inhalt dieses PopUps erst jetzt zum ersten Mal sichtbar wird, sicherheitshalber
     // erneut pruefen, ob alle Tabellen bereits in ihre Scrollbox gewrappt sind (siehe unten).
     ekeyWrapTablesForScroll();
+    ekeyAddResizeHandles();
 }
 
 function ekeyCloseModal(id) {
@@ -115,7 +132,15 @@ document.addEventListener("keydown", function (e) {
     }
 });
 
+// Wird waehrend einer Verschieben- (Kopfzeile) oder Groesse-aendern-Operation (Griff unten
+// rechts) auf true gesetzt (siehe die beiden IIFEs weiter unten). Verhindert, dass das PopUp
+// versehentlich schliesst, wenn beim Ziehen der Mauszeiger kurz ueber das dunkle Overlay
+// (ausserhalb des PopUps) hinauswandert - der Browser loest dabei automatisch noch einen
+// "click" auf dem Overlay aus, obwohl der Anwender nur ziehen wollte, nicht schliessen.
+var ekeyModalWirdGeradeGezogenOderSkaliert = false;
+
 document.addEventListener("click", function (e) {
+    if (ekeyModalWirdGeradeGezogenOderSkaliert) return;
     if (e.target && e.target.classList && e.target.classList.contains("ekey-modal-overlay")) {
         e.target.classList.remove("ekey-modal-open");
     }
@@ -155,6 +180,7 @@ document.addEventListener("click", function (e) {
         startY = e.clientY;
         startTop = rect.top;
         startLeft = rect.left;
+        ekeyModalWirdGeradeGezogenOderSkaliert = true;
         e.preventDefault();
     });
 
@@ -165,7 +191,98 @@ document.addEventListener("click", function (e) {
     });
 
     document.addEventListener("mouseup", function () {
+        if (!aktivesModal) return;
         aktivesModal = null;
+        // Verzoegert zuruecksetzen (erst im naechsten Tick): der Klick auf das Overlay, den der
+        // Browser beim Loslassen ausserhalb des PopUps noch nachreicht, muss den Handler oben
+        // noch als "waehrend des Ziehens" erkennen koennen.
+        setTimeout(function () { ekeyModalWirdGeradeGezogenOderSkaliert = false; }, 0);
+    });
+})();
+
+// ---------------------------------------------------------------------
+// Gilt fuer die ganze Anwendung: jedes PopUp (.ekey-modal) kann durch Ziehen an einem kleinen
+// Griff in der rechten unteren Ecke in der Groesse veraendert werden. Der Griff wird zur
+// Laufzeit ergaenzt (keine Template-Aenderung je PopUp noetig, gilt automatisch auch fuer
+// kuenftige PopUps). Die Groesse wird beim naechsten Oeffnen wieder zurueckgesetzt (siehe
+// ekeyOpenModal).
+// ---------------------------------------------------------------------
+
+function ekeyAddResizeHandles() {
+    document.querySelectorAll(".ekey-modal").forEach(function (modal) {
+        if (modal.querySelector(":scope > .ekey-resize-handle")) return;
+        var griff = document.createElement("div");
+        griff.className = "ekey-resize-handle";
+        griff.title = "Groesse aendern";
+        modal.appendChild(griff);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", ekeyAddResizeHandles);
+
+(function () {
+    var aktivesModal = null;
+    var startX = 0, startY = 0, startBreite = 0, startHoehe = 0;
+    var MIN_BREITE = 320;
+    var MIN_HOEHE = 200;
+    var MIN_LISTEN_HOEHE = 80;
+    // Listen (Tabellen) innerhalb des gerade skalierten PopUps: {el, hoehe} mit deren jeweiliger
+    // Hoehe zu Beginn des Ziehens - siehe mousemove weiter unten.
+    var startListenHoehen = [];
+
+    document.addEventListener("mousedown", function (e) {
+        if (!e.target.classList || !e.target.classList.contains("ekey-resize-handle")) return;
+        var modal = e.target.closest(".ekey-modal");
+        if (!modal) return;
+
+        var rect = modal.getBoundingClientRect();
+        // Feste Pixel-Groesse "einfrieren" und max-width/max-height aufheben, damit das PopUp
+        // ueber die urspruenglichen Grenzwerte hinaus wachsen kann.
+        modal.style.width = rect.width + "px";
+        modal.style.maxWidth = "none";
+        modal.style.height = rect.height + "px";
+        modal.style.maxHeight = "none";
+
+        // Listen (Tabellen) im PopUp sollen beim Ziehen um denselben Betrag mitwachsen/
+        // -schrumpfen wie das PopUp selbst - sonst bleibt die feste 45vh-Standardhoehe (siehe
+        // .ekey-table-scroll in style.css) unveraendert, waehrend drumherum nur mehr leerer
+        // Platz entsteht. Start-Hoehe je Liste merken und deren max-height aufheben (die wuerde
+        // sonst weiterhin begrenzend wirken).
+        startListenHoehen = [];
+        modal.querySelectorAll(".ekey-table-scroll:not(.ekey-table-scroll-full)").forEach(function (liste) {
+            var listenRect = liste.getBoundingClientRect();
+            liste.style.maxHeight = "none";
+            startListenHoehen.push({ el: liste, hoehe: listenRect.height });
+        });
+
+        aktivesModal = modal;
+        startX = e.clientX;
+        startY = e.clientY;
+        startBreite = rect.width;
+        startHoehe = rect.height;
+        ekeyModalWirdGeradeGezogenOderSkaliert = true;
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function (e) {
+        if (!aktivesModal) return;
+        var neueBreite = Math.max(MIN_BREITE, startBreite + (e.clientX - startX));
+        var neueHoehe = Math.max(MIN_HOEHE, startHoehe + (e.clientY - startY));
+        aktivesModal.style.width = neueBreite + "px";
+        aktivesModal.style.height = neueHoehe + "px";
+
+        var deltaHoehe = neueHoehe - startHoehe;
+        startListenHoehen.forEach(function (eintrag) {
+            eintrag.el.style.height = Math.max(MIN_LISTEN_HOEHE, eintrag.hoehe + deltaHoehe) + "px";
+        });
+    });
+
+    document.addEventListener("mouseup", function () {
+        if (!aktivesModal) return;
+        aktivesModal = null;
+        // Verzoegert zuruecksetzen (siehe Kommentar bei der gleichnamigen Stelle in der
+        // Verschieben-IIFE weiter oben - identischer Grund).
+        setTimeout(function () { ekeyModalWirdGeradeGezogenOderSkaliert = false; }, 0);
     });
 })();
 
@@ -187,12 +304,49 @@ function ekeyWrapTablesForScroll() {
         }
         var wrapper = document.createElement("div");
         wrapper.className = "ekey-table-scroll";
+        // Seite "Audit durchfuehren", Liste "Proofs": soll NICHT nur eine kompakte, feste Hoehe
+        // haben, sondern die komplette verfuegbare Bildschirmhoehe des Arbeitsbereichs ausnutzen
+        // (siehe ekeyLayoutFullHeightTables unten, welche die tatsaechliche Hoehe dynamisch
+        // berechnet statt eines festen max-height-Wertes).
+        if (table.classList.contains("ekey-table-full-height")) {
+            wrapper.className += " ekey-table-scroll-full";
+        }
         parent.insertBefore(wrapper, table);
         wrapper.appendChild(table);
     });
 }
 
 document.addEventListener("DOMContentLoaded", ekeyWrapTablesForScroll);
+
+// ---------------------------------------------------------------------
+// Seite "Audit durchfuehren", Liste "Proofs" (.ekey-table-full-height): die Scrollbox soll die
+// komplette verfuegbare Bildschirmhoehe des Arbeitsbereichs ausfuellen, nicht nur eine kompakte,
+// feste Hoehe wie normale Listen. Die Hoehe wird dynamisch berechnet (verfuegbarer Platz vom
+// oberen Rand der Box bis zum unteren Bildschirmrand, abzueglich der Fusszeile), damit es
+// unabhaengig von Fenstergroesse/Zoom korrekt bleibt - deshalb auch bei jedem Resize neu.
+// ---------------------------------------------------------------------
+
+function ekeyLayoutFullHeightTables() {
+    var footer = document.querySelector(".ekey-footer");
+    var footerHoehe = footer ? footer.getBoundingClientRect().height : 0;
+    document.querySelectorAll(".ekey-table-scroll-full").forEach(function (box) {
+        var rect = box.getBoundingClientRect();
+        var verfuegbar = window.innerHeight - rect.top - footerHoehe - 16;
+        box.style.height = Math.max(150, verfuegbar) + "px";
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    ekeyLayoutFullHeightTables();
+});
+
+(function () {
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(ekeyLayoutFullHeightTables, 150);
+    });
+})();
 
 // ---------------------------------------------------------------------
 // Seite "Audit durchfuehren", PopUp "Proof": Checkbox "Proof nicht bewerten" (Panel

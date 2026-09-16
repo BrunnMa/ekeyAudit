@@ -2033,7 +2033,19 @@ def list_proofs_for_plan(plan_id):
                (SELECT r.nichtBewerten FROM STG_QM_AuditResult r
                     WHERE r.auditProofsId = pf.id
                       AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
-               ) AS letzteNichtBewerten
+               ) AS letzteNichtBewerten,
+               (SELECT r.antwortZurFrage FROM STG_QM_AuditResult r
+                    WHERE r.auditProofsId = pf.id
+                      AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
+               ) AS letzteAntwortZurFrage,
+               (SELECT r.nameAuditor FROM STG_QM_AuditResult r
+                    WHERE r.auditProofsId = pf.id
+                      AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
+               ) AS letzterAuditor,
+               (SELECT r.datumerfasst FROM STG_QM_AuditResult r
+                    WHERE r.auditProofsId = pf.id
+                      AND r.id = (SELECT MAX(r2.id) FROM STG_QM_AuditResult r2 WHERE r2.auditProofsId = pf.id)
+               ) AS letztesDatum
         FROM STG_QM_AuditProofs pf
         WHERE pf.auditPlanId = ?
         ORDER BY pf.reihenfolge, pf.id
@@ -2042,6 +2054,27 @@ def list_proofs_for_plan(plan_id):
 
 def get_proof(proof_id):
     return query("SELECT * FROM STG_QM_AuditProofs WHERE id = ?", (proof_id,), fetchone=True)
+
+
+def proof_export_kennzahlen(plan_id):
+    """Liefert Abw.-/Massn.-Anzahl je Proof eines Plans - fuer den Excel-Export der Liste
+    'Proofs' (Seite 'Audit durchfuehren', siehe routes.py: audit_durchfuehren_proofs_export).
+    Fachlich dieselbe Kennzahl wie die Spalten 'Abw.'/'Maßn.' auf der Seite selbst (dort
+    ueber eine Vorab-Ladeschleife berechnet, die zusaetzlich noch die PopUp-Daten mitliefert) -
+    hier bewusst als einzelne, schlanke Bulk-Abfrage ohne die dort zusaetzlich benoetigten
+    Links/Anhaenge/Interviews, da der Export nur die Zahlen braucht."""
+    rows = query("""
+        SELECT pf.id AS proofId,
+               COUNT(DISTINCT a.id) AS abwAnzahl,
+               COUNT(DISTINCT m.id) AS massnAnzahl
+        FROM STG_QM_AuditProofs pf
+        LEFT JOIN STG_QM_AuditResult r ON r.auditProofsId = pf.id
+        LEFT JOIN STG_QM_AuditAbweichung a ON a.auditResultID = r.id
+        LEFT JOIN STG_QM_AuditMassnahme m ON m.auditAbweichungID = a.id
+        WHERE pf.auditPlanId = ?
+        GROUP BY pf.id
+    """, (plan_id,))
+    return {r["proofId"]: (r["abwAnzahl"] or 0, r["massnAnzahl"] or 0) for r in rows}
 
 
 def list_results_for_proof(proof_id):
