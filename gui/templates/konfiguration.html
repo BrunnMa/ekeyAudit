@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Konfiguration - {{ app_title }}{% endblock %}
+{% import "_macros_buttons.html" as btn %}
 {% block content %}
 <h1 class="ekey-h1">Konfiguration</h1>
 
@@ -36,7 +37,7 @@
                         <input type="hidden" name="table_key" value="audittyp">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>
@@ -67,7 +68,7 @@
                         <input type="hidden" name="table_key" value="auditstatus">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>
@@ -99,7 +100,7 @@
                         <input type="hidden" name="table_key" value="auditplanstatus">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>
@@ -130,7 +131,7 @@
                         <input type="hidden" name="table_key" value="auditbewertung">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>
@@ -184,7 +185,7 @@
                         <input type="hidden" name="table_key" value="mitarbeiter">
                         <input type="hidden" name="row_id" value="{{ row.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>

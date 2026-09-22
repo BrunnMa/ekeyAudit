@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Fachbereiche - {{ app_title }}{% endblock %}
+{% import "_macros_buttons.html" as btn %}
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Fachbereiche erfassen</h1>
 
@@ -65,7 +66,7 @@
                     <form method="post" action="{{ url_for('gui.governance_fachbereiche') }}" style="display:inline">
                         <input type="hidden" name="fachbereich_id" value="{{ f.id }}">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>

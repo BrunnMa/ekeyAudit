@@ -75,10 +75,28 @@
             <li><a href="{{ url_for('gui.dashboard') }}">Dashboard</a></li>
             <li><a href="{{ url_for('gui.berichte') }}">Berichte</a></li>
             <li><a href="{{ url_for('gui.abweichungen') }}">Abweichungen</a></li>
-            <li><a href="{{ url_for('gui.massnahmen') }}">Massnahmen</a></li>
+            <li><a href="#" onclick="ekeyOpenMassnahmenModal('{{ url_for('gui.massnahmen') }}'); return false;">Ma&szlig;nahmen</a></li>
         </ul>
     </aside>
     {% endif %}
+</div>
+
+<!-- Seite "Massnahmen" steht als PopUp zur Verfuegung (gilt fuer alle Stellen, die frueher auf
+     die eigene Seite verlinkt haben, z.B. "Schnellzugriff" oben und "Massnahmen ansehen" auf der
+     Seite "Auditabweichungen") - der Inhalt wird dabei unveraendert ueber ein <iframe> geladen
+     (siehe massnahmen.html: nutzt jetzt base_embed.html statt base.html), damit Filter,
+     Status-Aenderung und "Verlauf/Status aendern" innerhalb des PopUps genauso funktionieren wie
+     zuvor auf der eigenen Seite. -->
+<div id="modalMassnahmen" class="ekey-modal-overlay">
+<div class="ekey-modal ekey-modal-massnahmen">
+<div class="ekey-modal-header">
+    <h2>Ma&szlig;nahmen</h2>
+    <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalMassnahmen')" title="Schliessen">&times;</button>
+</div>
+<div class="ekey-modal-body">
+    <iframe id="massnahmenIframe" src="about:blank" title="Ma&szlig;nahmen" style="width: 100%; height: 100%; border: none; display: block;"></iframe>
+</div>
+</div>
 </div>
 
 <footer class="ekey-footer">

@@ -130,7 +130,7 @@ def generate_audit_report_pdf(programm_id):
         story.append(Spacer(1, 6))
 
     # Abweichungen des Programms
-    story.append(Paragraph("Abweichungen und Massnahmen", styles["EkeyHeading"]))
+    story.append(Paragraph("Abweichungen und Maßnahmen", styles["EkeyHeading"]))
     alle_abweichungen = [a for a in db.list_abweichungen() if a.get("programmId") == programm_id]
     if alle_abweichungen:
         for ab in alle_abweichungen:
@@ -143,7 +143,7 @@ def generate_audit_report_pdf(programm_id):
                 "SELECT * FROM STG_QM_AuditMassnahme WHERE auditAbweichungID = ?", (ab["id"],)
             )
             if massnahmen:
-                m_rows = [["Massnahme", "Termin", "Eigner"]]
+                m_rows = [["Maßnahme", "Termin", "Eigner"]]
                 for m in massnahmen:
                     m_rows.append([m.get("massnahme") or "", m.get("datumMassnahme") or "", m.get("nameEigner") or ""])
                 story.append(_std_table(m_rows, col_widths=[100 * mm, 30 * mm, 40 * mm]))

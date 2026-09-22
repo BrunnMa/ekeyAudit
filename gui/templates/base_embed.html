@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ app_title }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('gui.static', filename='css/style.css') }}">
+<!-- Schlankes Layout OHNE Kopf-/Fusszeile, Seitenleiste und "Schnellzugriff" - fuer Seiten, die
+     als PopUp in einem <iframe> eingebettet werden (siehe app.js: ekeyOpenMassnahmenModal), z.B.
+     die Seite "Massnahmen". Nutzt bewusst dieselbe style.css/app.js wie die normale App-Huelle
+     (base.html), damit Tabellen/Buttons/PopUps innerhalb des iframes identisch aussehen und
+     funktionieren (z.B. das PopUp "Massnahme anlegen" gibt es hier nicht, aber Status-Dropdowns,
+     Formulare etc. verhalten sich gleich). -->
+<style>
+  /* body/html-Hoehe hier bewusst NICHT auf 100vh/overflow:hidden wie in style.css fuer die
+     normale App-Huelle - der Inhalt soll innerhalb des iframes ganz normal mitwachsen und vom
+     iframe selbst (bzw. dem umgebenden PopUp) gescrollt werden koennen. */
+  body { height: auto; overflow: visible; padding: 14px; }
+</style>
+</head>
+<body>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div class="ekey-flash-container">
+        {% for category, message in messages %}
+            <div class="ekey-flash ekey-flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+<div id="ekeyLoadingOverlay" class="ekey-loading-overlay">
+    <div class="ekey-spinner"></div>
+    <div class="ekey-loading-text">Wird geladen...</div>
+</div>
+
+<script src="{{ url_for('gui.static', filename='js/app.js') }}"></script>
+</body>
+</html>

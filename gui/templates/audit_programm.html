@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Auditprogramm erstellen - {{ app_title }}{% endblock %}
+{% import "_macros_buttons.html" as btn %}
 {% block content %}
 <h1 class="ekey-h1">Auditprogramm erstellen</h1>
 
@@ -155,11 +156,11 @@
                     {% endif %}
                 {% endfor %}
                 {% if ns_del.loeschbar %}
-                <button type="button" class="ekey-btn"
-                        onclick="ekeyConfirmDeleteProgramm('{{ url_for('gui.audit_programm_delete', programm_id=edit_programm.id) }}')">Loeschen</button>
+                <button type="button" class="ekey-btn ekey-btn-delete" title="Loeschen"
+                        onclick="ekeyConfirmDeleteProgramm('{{ url_for('gui.audit_programm_delete', programm_id=edit_programm.id) }}')">{{ btn.delete_icon() }}</button>
                 {% else %}
-                <button type="button" class="ekey-btn" disabled
-                        title="Loeschen ist nur im Status 'Erfasst' oder 'Geplant' moeglich.">Loeschen</button>
+                <button type="button" class="ekey-btn ekey-btn-delete" disabled
+                        title="Loeschen ist nur im Status 'Erfasst' oder 'Geplant' moeglich.">{{ btn.delete_icon() }}</button>
                 {% endif %}
             {% endif %}
         </div>
@@ -176,7 +177,7 @@
 </div>
 <div class="ekey-modal-body">
     <p class="ekey-muted">Das Auditprogramm sowie alle zugehoerigen Auditplan-Eintraege (inkl. zugeordneter
-        Checkliste, Proofs, Ergebnisse, Abweichungen und Massnahmen) werden unwiderruflich geloescht.</p>
+        Checkliste, Proofs, Ergebnisse, Abweichungen und Ma&szlig;nahmen) werden unwiderruflich geloescht.</p>
     <form method="post" id="formDeleteProgramm" action="">
         <div class="ekey-form-actions">
             <button type="submit" class="ekey-btn ekey-btn-primary">Ja, loeschen</button>
@@ -262,7 +263,7 @@ function ekeyConfirmDeleteProgramm(deleteUrl) {
                 <td>
                     <form method="post" action="{{ url_for('gui.audit_programm_ziel_delete', ziel_id=z.id) }}" style="display:inline">
                         <input type="hidden" name="programm_id" value="{{ p.id }}">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>

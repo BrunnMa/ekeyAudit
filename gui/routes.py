@@ -640,7 +640,23 @@ def audit_durchfuehren():
         programm_id=programm_id,
         plaene=plaene,
         entwurf_status_id=entwurf_status_id,
+        audit_status=db.get_lookup("Look_QM_AuditPlanStatus"),
     )
+
+
+@gui.route("/audit-durchfuehren/<int:plan_id>/plan-status", methods=["POST"])
+@security.login_required
+def audit_durchfuehren_plan_status_update(plan_id):
+    """Status-Aenderung direkt in der Liste 'Alle Audit-Plaene des gewaehlten Programms'
+    (Seite 'Audit durchfuehren', Uebersicht vor Auswahl eines konkreten Plans) - analog zur
+    bereits bestehenden Statusspalte auf der Seite 'Audit planen' (siehe
+    audit_plan_status_update), nur mit Rueckkehr auf diese Seite statt 'Audit planen'."""
+    status_id = request.form.get("auditStatus")
+    if status_id:
+        db.update_audit_plan_status(plan_id, status_id)
+        flash("Status aktualisiert.", "success")
+    programm_id = request.form.get("programmId") or None
+    return redirect(url_for("gui.audit_durchfuehren", programmId=programm_id))
 
 
 @gui.route("/audit-durchfuehren/<int:plan_id>")
@@ -667,6 +683,7 @@ def audit_durchfuehren_detail(plan_id):
     interviews_by_proof = {}
     abweichungen_by_result = {}
     massnahmen_by_abweichung = {}
+    kommentare_by_massnahme = {}
     # Status je Abweichung ('in Arbeit'/'fertig', siehe db.compute_abweichung_status) sowie die
     # Anzahl Abweichungen/Massnahmen je Proof - fuer die Spalten "Abw."/"Maßn." in der Proofs-
     # Liste (Spalte "Abw." wird rot/gruen eingefaerbt, je nachdem ob mindestens eine Abweichung
@@ -701,6 +718,7 @@ def audit_durchfuehren_detail(plan_id):
             massnahmen_fuer_result = db.list_massnahmen_for_result(r["id"])
             for m in massnahmen_fuer_result:
                 massnahmen_by_abweichung.setdefault(m["abweichungId"], []).append(m)
+                kommentare_by_massnahme[m["id"]] = db.list_massnahme_kommentare(m["id"])
             abw_count += len(abws)
             massn_count += len(massnahmen_fuer_result)
             for a in abws:
@@ -715,6 +733,7 @@ def audit_durchfuehren_detail(plan_id):
     proof_open_id = request.args.get("proofOpen")
     abweichungen_open_id = request.args.get("abweichungenOpen")
     massnahmen_abweichung_open_id = request.args.get("massnahmenAbweichungOpen")
+    massnahme_kommentare_open_id = request.args.get("massnahmeKommentareOpen")
     return render_template(
         "audit_durchfuehren.html",
         plan=plan,
@@ -728,6 +747,7 @@ def audit_durchfuehren_detail(plan_id):
         interviews_by_proof=interviews_by_proof,
         abweichungen_by_result=abweichungen_by_result,
         massnahmen_by_abweichung=massnahmen_by_abweichung,
+        kommentare_by_massnahme=kommentare_by_massnahme,
         abweichung_status_by_id=abweichung_status_by_id,
         proof_abw_count=proof_abw_count,
         proof_massn_count=proof_massn_count,
@@ -736,6 +756,7 @@ def audit_durchfuehren_detail(plan_id):
         proof_open_id=proof_open_id,
         abweichungen_open_id=abweichungen_open_id,
         massnahmen_abweichung_open_id=massnahmen_abweichung_open_id,
+        massnahme_kommentare_open_id=massnahme_kommentare_open_id,
         heute=datetime.now().strftime("%Y-%m-%d"),
         detail_mode=True,
     )
@@ -845,6 +866,53 @@ def audit_durchfuehren_proofs_export(plan_id):
         puffer, as_attachment=True, download_name=dateiname,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@gui.route("/audit-durchfuehren/<int:plan_id>/proof/add", methods=["POST"])
+@security.login_required
+def audit_durchfuehren_proof_add(plan_id):
+    """Button '+Proof manuell hinzufuegen' (Seite 'Audit durchfuehren', Liste 'Proofs') - nutzt
+    dieselbe DB-Funktion wie das analoge Formular auf der Seite 'Audit planen'
+    (siehe audit_plan_proof_add/db.add_manual_proof_to_plan), kehrt danach aber auf diese Seite
+    zurueck statt auf 'Audit planen'."""
+    if not db.get_audit_plan(plan_id):
+        abort(404)
+    data = {
+        "auditFrage": request.form.get("auditFrage", "").strip(),
+        "normKapitel": request.form.get("normKapitel"),
+        "auditResultInfo": request.form.get("auditResultInfo", ""),
+        "reihenfolge": request.form.get("reihenfolge"),
+    }
+    if not data["auditFrage"]:
+        flash("Bitte eine Frage/einen Pruefpunkt-Text angeben.", "error")
+    else:
+        db.add_manual_proof_to_plan(plan_id, data)
+        flash("Proof manuell hinzugefuegt.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=plan_id))
+
+
+@gui.route("/audit-durchfuehren/proof/<int:proof_id>/delete", methods=["POST"])
+@security.login_required
+def audit_durchfuehren_proof_delete(proof_id):
+    """Button 'Loeschen' in der Spalte 'Aktion' der Liste 'Proofs' (Seite 'Audit durchfuehren').
+    db.delete_proof() raeumt bereits alle abhaengigen Datenbankzeilen auf (Ergebnisse,
+    Abweichungen, Massnahmen, Interviews, Links, Anhaenge) - tatsaechlich hochgeladene Anhang-
+    Dateien (siehe audit_proof_anhang_add) muessen zusaetzlich noch vom Dateisystem entfernt
+    werden, das macht db.delete_proof() bewusst nicht (Dateisystemzugriff ist Aufgabe von
+    routes.py, siehe auch audit_anhang_delete)."""
+    proof = db.get_proof(proof_id)
+    if not proof:
+        abort(404)
+    plan_id = proof["auditPlanId"]
+    for anhang in db.list_anhaenge(proof_id):
+        gespeicherter_name = anhang.get("gespeicherterDateiname")
+        if gespeicherter_name:
+            pfad = os.path.join(config.UPLOAD_DIR, gespeicherter_name)
+            if os.path.exists(pfad):
+                os.remove(pfad)
+    db.delete_proof(proof_id)
+    flash("Proof geloescht.", "success")
+    return redirect(url_for("gui.audit_durchfuehren_detail", plan_id=plan_id))
 
 
 @gui.route("/audit-durchfuehren/proof/<int:proof_id>/result/add", methods=["POST"])
@@ -1017,12 +1085,13 @@ def audit_durchfuehren_massnahme_add(proof_id):
     massnahme_text = request.form.get("massnahme", "").strip()
     datum = request.form.get("datumMassnahme") or datetime.now().strftime("%Y-%m-%d")
     eigner = request.form.get("massnahmeEigner", "").strip()
+    datum_erfassung = request.form.get("datumErfassung") or datetime.now().strftime("%Y-%m-%d")
 
     if abweichung_id and massnahme_text and eigner:
-        db.add_massnahme(abweichung_id, massnahme_text, datum, eigner)
-        flash("Massnahme erfasst.", "success")
+        db.add_massnahme(abweichung_id, massnahme_text, datum, eigner, datum_erfassung)
+        flash("Maßnahme erfasst.", "success")
     else:
-        flash("Bitte Abweichung, Massnahme und Eigner angeben.", "error")
+        flash("Bitte Abweichung, Maßnahme und Eigner angeben.", "error")
 
     return redirect(url_for(
         "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
@@ -1049,7 +1118,104 @@ def audit_massnahme_status_update(massnahme_id):
     status_id = request.form.get("statusMassnahmeID")
     if status_id:
         db.update_massnahme_status(massnahme_id, status_id)
-        flash("Status der Massnahme aktualisiert.", "success")
+        flash("Status der Maßnahme aktualisiert.", "success")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
+    ))
+
+
+@gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/edit", methods=["POST"])
+@security.login_required
+def audit_massnahme_edit(massnahme_id):
+    """Button [bearbeiten] in der Spalte [Aktion] der Liste 'Erfasste Maßnahmen' (PopUp
+    'Maßnahmen' unter 'Audit durchfuehren')."""
+    massnahme = db.get_massnahme(massnahme_id)
+    if not massnahme:
+        abort(404)
+    abweichung = db.get_abweichung(massnahme["auditAbweichungID"])
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    massnahme_text = request.form.get("massnahme", "").strip()
+    datum = request.form.get("datumMassnahme") or datetime.now().strftime("%Y-%m-%d")
+    eigner = request.form.get("massnahmeEigner", "").strip()
+    datum_erfassung = request.form.get("datumErfassung") or datetime.now().strftime("%Y-%m-%d")
+
+    if massnahme_text and eigner:
+        db.update_massnahme(massnahme_id, massnahme_text, datum, eigner, datum_erfassung)
+        flash("Maßnahme aktualisiert.", "success")
+    else:
+        flash("Bitte Maßnahme und Eigner angeben.", "error")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
+    ))
+
+
+@gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/kommentar/add", methods=["POST"])
+@security.login_required
+def audit_massnahme_kommentar_add(massnahme_id):
+    """Button [Kommentieren] in der Spalte [Aktion] der Liste 'Erfasste Maßnahmen' (PopUp
+    'Maßnahmen' unter 'Audit durchfuehren')."""
+    massnahme = db.get_massnahme(massnahme_id)
+    if not massnahme:
+        abort(404)
+    abweichung = db.get_abweichung(massnahme["auditAbweichungID"])
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    kommentar = request.form.get("kommentar", "").strip()
+    name = request.form.get("name", "").strip()
+    datum = request.form.get("kommentarDatum") or datetime.now().strftime("%Y-%m-%d")
+
+    if kommentar and name:
+        db.add_massnahme_kommentar(massnahme_id, datum, name, kommentar)
+        flash("Kommentar erfasst.", "success")
+    else:
+        flash("Bitte Name und Kommentar angeben.", "error")
+
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
+        massnahmeKommentareOpen=massnahme_id,
+    ))
+
+
+@gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/delete", methods=["POST"])
+@security.login_required
+def audit_massnahme_delete(massnahme_id):
+    """Button [loeschen] in der Spalte [Aktion] der Liste 'Erfasste Maßnahmen' (PopUp
+    'Maßnahmen' unter 'Audit durchfuehren')."""
+    massnahme = db.get_massnahme(massnahme_id)
+    if not massnahme:
+        abort(404)
+    abweichung = db.get_abweichung(massnahme["auditAbweichungID"])
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    db.delete_massnahme(massnahme_id)
+    flash("Maßnahme geloescht.", "success")
 
     return redirect(url_for(
         "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
@@ -1290,7 +1456,8 @@ def governance_checkliste_delete(checkliste_id):
 def abweichungen():
     status_filter = request.args.get("status")
     programm_filter = request.args.get("programmId")
-    liste = db.list_abweichungen(status_filter, programm_filter)
+    eigner_filter = request.args.get("eigner")
+    liste = db.list_abweichungen(status_filter, programm_filter, eigner_filter)
     return render_template(
         "abweichungen.html",
         abweichungen=liste,
@@ -1298,6 +1465,8 @@ def abweichungen():
         status_filter=status_filter,
         programme=db.list_audit_programme(),
         programm_filter=programm_filter,
+        eigner_namen=db.list_abweichung_eigner_namen(),
+        eigner_filter=eigner_filter,
         kpis={
             "abweichungen_gesamt": kpi.anzahl_abweichungen_gesamt(),
             "massnahmen_gesamt": kpi.anzahl_massnahmen_gesamt(),
@@ -1314,10 +1483,34 @@ def abweichung_massnahme_add(abweichung_id):
     eigner = request.form.get("nameEigner", "")
     if massnahme and eigner:
         db.add_massnahme(abweichung_id, massnahme, datum, eigner)
-        flash("Massnahme hinzugefuegt.", "success")
+        flash("Maßnahme hinzugefuegt.", "success")
     else:
-        flash("Massnahme und Eigner sind Pflichtfelder.", "error")
-    return redirect(url_for("gui.abweichungen"))
+        flash("Maßnahme und Eigner sind Pflichtfelder.", "error")
+    return redirect(url_for(
+        "gui.abweichungen",
+        status=request.form.get("statusFilter") or None,
+        programmId=request.form.get("programmFilter") or None,
+        eigner=request.form.get("eignerFilter") or None,
+    ))
+
+
+@gui.route("/abweichungen/<int:abweichung_id>/status", methods=["POST"])
+@security.login_required
+def abweichung_status_update(abweichung_id):
+    """Aenderbare Status-Spalte in der Liste 'Abweichungen' (Seite 'Auditabweichungen') - der
+    hier gesetzte Status (Look_QM_AuditStatus) ist der eigentliche, frei waehlbare Status einer
+    Abweichung (nicht zu verwechseln mit dem berechneten 'in Arbeit'/'fertig'-Status aus den
+    Massnahmen, der weiterhin nicht manuell aenderbar ist)."""
+    status_id = request.form.get("abweichungStatus")
+    if status_id:
+        db.update_abweichung_status(abweichung_id, status_id)
+        flash("Status aktualisiert.", "success")
+    return redirect(url_for(
+        "gui.abweichungen",
+        status=request.form.get("statusFilter") or None,
+        programmId=request.form.get("programmFilter") or None,
+        eigner=request.form.get("eignerFilter") or None,
+    ))
 
 
 # --------------------------------------------------------------------------
@@ -1328,12 +1521,15 @@ def abweichung_massnahme_add(abweichung_id):
 @security.login_required
 def massnahmen():
     status_filter = request.args.get("status")
-    liste = db.list_massnahmen(status_filter)
+    abweichung_filter = request.args.get("abweichungId")
+    liste = db.list_massnahmen(status_filter, abweichung_filter)
     return render_template(
         "massnahmen.html",
         massnahmen=liste,
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
         status_filter=status_filter,
+        abweichung_filter=abweichung_filter,
+        gefilterte_abweichung=db.get_abweichung(abweichung_filter) if abweichung_filter else None,
     )
 
 
@@ -1351,6 +1547,7 @@ def massnahme_detail(massnahme_id):
         verlauf=verlauf,
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
         massnahmen=[],
+        abweichung_filter=request.args.get("abweichungId"),
     )
 
 

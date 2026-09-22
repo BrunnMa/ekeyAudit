@@ -273,6 +273,34 @@ a:hover { text-decoration: underline; }
   background: var(--ekey-error);
   color: #FFFFFF;
 }
+/* Gilt fuer die ganze Anwendung: Button "Loeschen" zeigt nur noch das Mistkuebel-Symbol (kein
+   Text mehr), quadratische Form, roter Rahmen + rotes Symbol (Symbol nutzt currentColor, siehe
+   das per Makro eingefuegte SVG in _macros_buttons.html - erbt die Farbe automatisch). */
+.ekey-btn-delete {
+  min-width: 26px;
+  min-height: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-color: var(--ekey-error);
+  color: var(--ekey-error);
+}
+.ekey-btn-delete:hover {
+  background: var(--ekey-error);
+  color: #FFFFFF;
+}
+.ekey-btn-delete svg { display: block; }
+/* Blauer Button "+Proof manuell hinzufuegen" (Seite "Audit durchfuehren"): Rahmen + Schrift in
+   RGB(20,60,200), analog zum Hover-Verhalten von .ekey-btn-danger/.ekey-btn (Flaeche fuellt sich
+   beim Hover in derselben Farbe, Schrift wird weiss). */
+.ekey-btn-blue {
+  border-color: rgb(20, 60, 200);
+  color: rgb(20, 60, 200);
+}
+.ekey-btn-blue:hover {
+  background: rgb(20, 60, 200);
+  color: #FFFFFF;
+}
 
 /* ---------------- Forms ---------------- */
 form { margin: 0; }
@@ -353,6 +381,38 @@ input:focus, select:focus, textarea:focus {
 .ekey-rt-btn:hover { background: var(--ekey-primary); color: #FFFFFF; }
 .ekey-inline-number { width: 44px; text-align: center; padding: 4px 2px; }
 .ekey-info-icon { cursor: help; color: var(--ekey-primary); font-size: 15px; }
+/* Rich-Text-Mouseover (z.B. Seite "Auditabweichungen", Liste "Abweichungen": Spalten "#" und
+   "Abweichung" zeigen die Frage/den Pruefpunkt als Tooltip): das native title-Attribut kann nur
+   einfachen Text darstellen, kein HTML/Rich-Text - deshalb hier ein rein CSS-basierter Tooltip
+   (kein JS noetig), der beliebigen (Rich-Text-)Inhalt beim Ueberfahren mit der Maus einblendet. */
+.ekey-hover-tooltip {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted var(--ekey-muted);
+}
+.ekey-hover-tooltip-content {
+  display: none;
+  position: absolute;
+  z-index: 100;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 240px;
+  max-width: 420px;
+  background: #FFFFFF;
+  border: 1px solid var(--ekey-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--ekey-text);
+  white-space: normal;
+  cursor: auto;
+}
+.ekey-hover-tooltip:hover .ekey-hover-tooltip-content,
+.ekey-hover-tooltip:focus-within .ekey-hover-tooltip-content {
+  display: block;
+}
 .ekey-th-reihenfolge { width: 1%; white-space: normal; text-align: center; line-height: 1.2; }
 .ekey-td-reihenfolge { width: 1%; text-align: center; padding-left: 4px; padding-right: 4px; }
 .ekey-actions-row { display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; white-space: nowrap; }
@@ -428,6 +488,11 @@ input:focus, select:focus, textarea:focus {
    alle Gruppen hinweg gleich breit bleibt, unabhaengig vom Inhalt der jeweiligen Gruppe. */
 .ekey-table-fixed { table-layout: fixed; }
 .ekey-table-fixed td, .ekey-table-fixed th { overflow-wrap: break-word; }
+
+/* Seite "Audit durchfuehren", Liste "Proofs": Spalten "Bewertung"/"Abw."/"Maßn." horizontal UND
+   vertikal zentriert (statt der sonst ueblichen linksbuendigen/oben ausgerichteten Standard-
+   darstellung von .ekey-table td). */
+.ekey-td-center { text-align: center; vertical-align: middle; }
 
 /* ---------------- Flash Messages ---------------- */
 .ekey-flash-container { margin-bottom: 12px; }
@@ -542,6 +607,21 @@ input:focus, select:focus, textarea:focus {
   gap: 16px;
 }
 
+/* PopUp "Proof - Plan" (Seite "Audit durchfuehren"): Buttons [Links]/[Anh&auml;nge]/[Abweichung]
+   (oeffnen jeweils ein eigenes PopUp) nehmen zusammen 3/4 der Breite des Arbeitsbereichs ein
+   (gleiche Hoehe/Breite je Button), das verbleibende 1/4 zeigt die Datenfelder "Anzahl der
+   Abweichungen"/"Anzahl der Ma&szlig;nahmen" neben dem Button [Abweichung]. */
+.ekey-proof-action-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+.ekey-proof-action-row .ekey-proof-action-btn { width: 100%; height: 100%; }
+.ekey-proof-action-counts { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.ekey-proof-action-counts span { display: block; }
+
 .ekey-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 
 @media (max-width: 900px) {
@@ -550,6 +630,11 @@ input:focus, select:focus, textarea:focus {
   .ekey-form-grid { grid-template-columns: 1fr; }
   .ekey-form-row-wide { grid-column: span 1; }
   .ekey-grid-2 { grid-template-columns: 1fr; }
+  .ekey-proof-action-row { grid-template-columns: 1fr; }
+  /* Auf schmalen Bildschirmen keine Rechts-/Unten-Versetzung - sonst droht das PopUp seitlich
+     abgeschnitten zu werden bzw. unnoetig weit nach unten zu rutschen (siehe
+     .ekey-modal-offset-1/-2 oben). */
+  .ekey-modal-offset-1, .ekey-modal-offset-2, .ekey-modal-offset-3 { margin-left: 0; margin-top: 0; }
 }
 
 /* ---------------- Ladeanzeige (z.B. beim Oeffnen "Audit durchfuehren - Plan") ---------------- */
@@ -594,6 +679,42 @@ input:focus, select:focus, textarea:focus {
   overflow-y: auto;
 }
 .ekey-modal-overlay.ekey-modal-open { display: flex; }
+/* Verschachtelte PopUps [Links]/[Anh&auml;nge]/[Abweichung] (aus PopUp "Proof - Plan" geoeffnet)
+   und [Ma&szlig;nahmen] (aus PopUp "Abweichung - Plan" geoeffnet, siehe audit_durchfuehren.html):
+   werden beim Oeffnen etwas nach rechts UND unten gegenueber dem dahinterliegenden, bereits
+   aktiven PopUp versetzt (statt exakt deckungsgleich in der Mitte zu erscheinen) - im gleichen
+   Mass in beide Richtungen. .ekey-modal-offset-2 (zwei Ebenen verschachtelt, z.B. [Ma&szlig;nahmen]
+   unter [Abweichung]) liegt dabei nochmal ein Stueck weiter rechts/unten als .ekey-modal-offset-1,
+   damit die Kaskade sichtbar bleibt. */
+.ekey-modal-offset-1 { margin-left: 60px; margin-top: 60px; }
+.ekey-modal-offset-2 { margin-left: 120px; margin-top: 120px; }
+.ekey-modal-offset-3 { margin-left: 180px; margin-top: 180px; }
+
+/* Liste "Erfasste Massnahmen" (PopUp "Massnahmen - Plan", Seite "Audit durchfuehren"): Button
+   [Bearbeiten] oeffnet dafuer bewusst KEIN eigenes PopUp mehr, sondern schaltet die betroffene
+   Tabellenzeile direkt auf Eingabemodus um (Klasse .ekey-row-editing auf der <tr>). Die
+   Eingabefelder liegen dafuer bereits immer in der jeweiligen Zelle (per HTML form="..."-
+   Attribut einem <form> ausserhalb der Tabelle zugeordnet - gleiches Prinzip wie beim Button
+   "Speichern" im PopUp "Proof": form="formErgebnis..."), aber standardmaessig ausgeblendet. */
+.ekey-massnahme-edit { display: none; }
+tr.ekey-row-editing > td > .ekey-massnahme-view { display: none; }
+tr.ekey-row-editing > td > .ekey-massnahme-edit { display: block; width: 100%; }
+tr.ekey-row-editing > td > div.ekey-massnahme-edit { display: flex; }
+
+/* Spalte [Aktion] derselben Liste: Buttons dort um 25% verkleinert gegenueber den sonst
+   ueblichen .ekey-btn-small/.ekey-btn-delete Groessen. */
+.ekey-btn-mini.ekey-btn-small {
+  min-width: 52.5px;
+  min-height: 18px;
+  font-size: 7.5px;
+  padding: 1.5px 4.5px;
+}
+.ekey-btn-mini.ekey-btn-delete {
+  min-width: 19.5px;
+  min-height: 19.5px;
+  width: 19.5px;
+  height: 19.5px;
+}
 .ekey-modal {
   background: #FFFFFF;
   border: 1px solid var(--ekey-border);
@@ -663,6 +784,21 @@ input:focus, select:focus, textarea:focus {
   /* Damit der Koerper bei einem groesser gezogenen PopUp (siehe .ekey-resize-handle) auch
      tatsaechlich die zusaetzliche Hoehe ausfuellt (statt darunter leeren Platz zu lassen). */
   flex: 1 1 auto;
+}
+/* PopUp "Massnahmen" (siehe base.html: modalMassnahmen) - Groesse hier bewusst per eigener
+   CSS-Klasse statt per inline style="..." festgelegt: ekeyOpenModal() (app.js) setzt bei jedem
+   Oeffnen modal.style.maxWidth/height etc. auf "" zurueck (um ein zuvor per Hand gezogenes/
+   skaliertes PopUp beim naechsten Oeffnen wieder auf den Ausgangszustand zu bringen) - ein
+   inline gesetzter Ausgangswert wuerde dabei ebenfalls verloren gehen, eine CSS-Klassenregel
+   dagegen nicht. Explizite Hoehe (statt nur max-height) noetig, damit .ekey-modal-body eine
+   definierte Hoehe hat, an der sich das eingebettete <iframe style="height:100%"> orientieren
+   kann. */
+.ekey-modal-massnahmen {
+  max-width: 1000px;
+  height: 85vh;
+}
+.ekey-modal-massnahmen .ekey-modal-body {
+  padding: 0;
 }
 
 /* ---------------- Filterzeile (z.B. Auditprogramm-Auswahl vor Listenanzeige) ---------------- */

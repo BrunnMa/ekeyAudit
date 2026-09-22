@@ -1,12 +1,16 @@
-{% extends "base.html" %}
-{% block title %}Massnahmen - {{ app_title }}{% endblock %}
+{# Diese Seite wird nicht mehr direkt (mit Kopf-/Fusszeile/Seitenleiste) aufgerufen, sondern als
+   PopUp per <iframe> eingebettet (siehe base.html: modalMassnahmen, app.js:
+   ekeyOpenMassnahmenModal) - deshalb hier das schlanke Embed-Layout statt der normalen
+   App-Huelle. #}
+{% extends "base_embed.html" %}
+{% block title %}Ma&szlig;nahmen - {{ app_title }}{% endblock %}
 {% block content %}
 
 {% if detail_mode %}
-    <h1 class="ekey-h1">Massnahme #{{ massnahme.id }}</h1>
+    <h1 class="ekey-h1">Ma&szlig;nahme #{{ massnahme.id }}</h1>
     <div class="ekey-panel">
         <h2 class="ekey-h2">Details</h2>
-        <p><strong>Massnahme:</strong> {{ massnahme.massnahme }}</p>
+        <p><strong>Ma&szlig;nahme:</strong> {{ massnahme.massnahme }}</p>
         <p><strong>Termin:</strong> {{ massnahme.datumMassnahme }} | <strong>Eigner:</strong> {{ massnahme.nameEigner }}</p>
     </div>
 
@@ -69,14 +73,25 @@
             </div>
         </form>
     </div>
-    <a href="{{ url_for('gui.massnahmen') }}" class="ekey-btn">Zurueck zur Liste</a>
+    <a href="{{ url_for('gui.massnahmen', abweichungId=abweichung_filter) }}" class="ekey-btn">Zurueck zur Liste</a>
 
 {% else %}
-    <h1 class="ekey-h1">Massnahmen</h1>
+    <h1 class="ekey-h1">Ma&szlig;nahmen</h1>
+
+    {% if gefilterte_abweichung %}
+    <div class="ekey-panel">
+        <p class="ekey-hint" style="margin: 0;">
+            Gefilterte Ansicht: nur Ma&szlig;nahmen der Abweichung #{{ gefilterte_abweichung.id }}
+            (<span class="ekey-richtext-display" style="display: inline;">{{ gefilterte_abweichung.abweichung | safe }}</span>).
+            <a href="{{ url_for('gui.massnahmen', status=status_filter) }}">Filter aufheben</a>
+        </p>
+    </div>
+    {% endif %}
 
     <div class="ekey-panel">
         <h2 class="ekey-h2">Filter</h2>
         <form method="get" action="{{ url_for('gui.massnahmen') }}" class="ekey-inline-form">
+            <input type="hidden" name="abweichungId" value="{{ abweichung_filter or '' }}">
             <select name="status" onchange="this.form.submit()">
                 <option value="">Alle Status</option>
                 {% for s in audit_status %}
@@ -88,22 +103,22 @@
     </div>
 
     <div class="ekey-panel">
-        <h2 class="ekey-h2">Alle Massnahmen</h2>
+        <h2 class="ekey-h2">Alle Ma&szlig;nahmen</h2>
         <table class="ekey-table">
-            <thead><tr><th>#</th><th>Massnahme</th><th>Abweichung</th><th>Termin</th><th>Eigner</th><th>Aktueller Status</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>#</th><th>Ma&szlig;nahme</th><th>Abweichung</th><th>Termin</th><th>Eigner</th><th>Aktueller Status</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for m in massnahmen %}
                 <tr>
                     <td>{{ m.id }}</td>
                     <td>{{ m.massnahme }}</td>
-                    <td>{{ m.abweichung }}</td>
+                    <td class="ekey-richtext-display">{{ m.abweichung | safe }}</td>
                     <td>{{ m.datumMassnahme }}</td>
                     <td>{{ m.nameEigner }}</td>
                     <td>{{ m.aktuellerStatusName }}</td>
-                    <td><a href="{{ url_for('gui.massnahme_detail', massnahme_id=m.id) }}" class="ekey-btn ekey-btn-small">Verlauf / Status aendern</a></td>
+                    <td><a href="{{ url_for('gui.massnahme_detail', massnahme_id=m.id, abweichungId=abweichung_filter) }}" class="ekey-btn ekey-btn-small">Verlauf / Status aendern</a></td>
                 </tr>
             {% else %}
-                <tr><td colspan="7">Keine Massnahmen vorhanden.</td></tr>
+                <tr><td colspan="7">Keine Ma&szlig;nahmen vorhanden.</td></tr>
             {% endfor %}
             </tbody>
         </table>

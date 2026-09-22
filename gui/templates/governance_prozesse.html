@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Prozesse - {{ app_title }}{% endblock %}
+{% import "_macros_buttons.html" as btn %}
 {% block content %}
 <h1 class="ekey-h1">Audit governance - Prozesse erfassen</h1>
 
@@ -113,7 +114,7 @@
                         <input type="hidden" name="prozess_id" value="{{ p.id }}">
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="fachbereichFilter" value="{{ fachbereich_filter or '' }}">
-                        <button type="submit" class="ekey-btn ekey-btn-small">Loeschen</button>
+                        <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
                 </td>
             </tr>

@@ -119,9 +119,35 @@ function ekeyOpenModal(id) {
     ekeyAddResizeHandles();
 }
 
+// Seite "Massnahmen" steht als PopUp zur Verfuegung (siehe base.html: modalMassnahmen) - der
+// Inhalt wird unveraendert ueber ein <iframe> geladen, damit Filter, Status-Aenderung und
+// "Verlauf/Status aendern" innerhalb des PopUps genauso funktionieren wie zuvor auf der eigenen
+// Seite (siehe massnahmen.html: nutzt jetzt base_embed.html statt base.html).
+function ekeyOpenMassnahmenModal(url) {
+    var iframe = document.getElementById("massnahmenIframe");
+    if (iframe) iframe.src = url;
+    ekeyOpenModal("modalMassnahmen");
+}
+
 function ekeyCloseModal(id) {
     var overlay = document.getElementById(id);
     if (overlay) overlay.classList.remove("ekey-modal-open");
+}
+
+// Liste "Erfasste Massnahmen" (PopUp "Massnahmen - Plan", Seite "Audit durchfuehren"): Button
+// [Neue Massnahme] blendet eine zusaetzliche Eingabezeile direkt in der Tabelle ein/aus, statt
+// ein eigenes PopUp/Formular zu oeffnen (siehe audit_durchfuehren.html: massnahmeNeueZeile...,
+// formMassnahmeNeu...).
+function ekeyToggleNeueMassnahmeZeile(abweichungId, sichtbar) {
+    var row = document.getElementById("massnahmeNeueZeile" + abweichungId);
+    if (row) row.style.display = sichtbar ? "table-row" : "none";
+}
+
+// Button [Bearbeiten] in derselben Liste schaltet die betroffene Zeile direkt auf Eingabemodus
+// um (Klasse .ekey-row-editing, siehe style.css), statt ein eigenes PopUp zu oeffnen.
+function ekeyToggleMassnahmeEdit(massnahmeId) {
+    var row = document.getElementById("massnahmeRow" + massnahmeId);
+    if (row) row.classList.toggle("ekey-row-editing");
 }
 
 document.addEventListener("keydown", function (e) {
@@ -433,9 +459,9 @@ document.addEventListener("keydown", function (e) {
 // ---------------------------------------------------------------------
 // Seite "Audit planen", PopUp "Auditplan importieren": nach Auswahl der
 // Excel-Datei werden deren Tabellenblaetter per AJAX ermittelt und als
-// Checkbox-Liste angezeigt (alle zunaechst markiert). Beim eigentlichen
-// Import (Formular-Absenden) werden dann nur die markierten Blaetter
-// beruecksichtigt (siehe routes.py: audit_plan_import).
+// Checkbox-Liste angezeigt (standardmaessig alle NICHT markiert - bewusste
+// Auswahl noetig). Beim eigentlichen Import (Formular-Absenden) werden dann
+// nur die markierten Blaetter beruecksichtigt (siehe routes.py: audit_plan_import).
 // ---------------------------------------------------------------------
 
 function ekeyLoadImportSheets(input) {
@@ -481,7 +507,7 @@ function ekeyLoadImportSheets(input) {
                 cb.type = "checkbox";
                 cb.name = "selectedSheets";
                 cb.value = name;
-                cb.checked = true;
+                cb.checked = false;
                 label.appendChild(cb);
                 label.appendChild(document.createTextNode(" " + name));
                 list.appendChild(label);

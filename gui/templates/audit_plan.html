@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Audit planen - {{ app_title }}{% endblock %}
 {% import "_macros_richtext.html" as rt %}
+{% import "_macros_buttons.html" as btn %}
 {% block content %}
 <h1 class="ekey-h1">Audit planen</h1>
 
@@ -224,8 +225,8 @@
                 <td>
                     <a href="{{ url_for('gui.audit_plan', edit=pl.id, programmFilter=programm_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
                     <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalChecklistePlan{{ pl.id }}')">Checkliste</button>
-                    <button type="button" class="ekey-btn ekey-btn-small"
-                            onclick="ekeyConfirmDeletePlan('{{ url_for('gui.audit_plan_delete', plan_id=pl.id) }}')">Loeschen</button>
+                    <button type="button" class="ekey-btn ekey-btn-delete" title="Loeschen"
+                            onclick="ekeyConfirmDeletePlan('{{ url_for('gui.audit_plan_delete', plan_id=pl.id) }}')">{{ btn.delete_icon() }}</button>
                 </td>
             </tr>
         {% else %}
@@ -283,7 +284,7 @@
                         <a href="{{ url_for('gui.audit_plan', programmFilter=programm_filter, checklistePlan=pl.id, proofEdit=pf.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
                         <form method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}" style="display:inline">
                             <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
-                            <button type="submit" class="ekey-btn ekey-btn-small" onclick="return confirm('Diesen Proof wirklich loeschen?');">Loeschen</button>
+                            <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen" onclick="return confirm('Diesen Proof wirklich loeschen?');">{{ btn.delete_icon() }}</button>
                         </form>
                     </div>
                 </td>
@@ -415,7 +416,7 @@
 </div>
 <div class="ekey-modal-body">
     <p class="ekey-muted">Der Auditplan-Eintrag sowie alle zugehoerigen Proofs, Ergebnisse, Abweichungen und
-        Massnahmen werden unwiderruflich geloescht.</p>
+        Ma&szlig;nahmen werden unwiderruflich geloescht.</p>
     <form method="post" id="formDeletePlan" action="">
         <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
         <div class="ekey-form-actions">

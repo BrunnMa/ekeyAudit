@@ -335,6 +335,7 @@ SCHEMA_STATEMENTS = [
         datumMassnahme TEXT,
         nameEigner TEXT,
         statusMassnahmeID INTEGER NOT NULL DEFAULT 1,
+        datumErfassung TEXT,
         FOREIGN KEY (auditAbweichungID) REFERENCES STG_QM_AuditAbweichung(id),
         FOREIGN KEY (statusMassnahmeID) REFERENCES Look_QM_MassnahmenStatus(id)
     )
@@ -351,6 +352,16 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY (auditMassnahmeID) REFERENCES STG_QM_AuditMassnahme(id),
         FOREIGN KEY (status) REFERENCES Look_QM_AuditStatus(id),
         FOREIGN KEY (statusNeu) REFERENCES Look_QM_AuditStatus(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS STG_QM_MassnahmeKommentar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        auditMassnahmeID INTEGER NOT NULL,
+        kommentarDatum TEXT,
+        name TEXT,
+        kommentar TEXT,
+        FOREIGN KEY (auditMassnahmeID) REFERENCES STG_QM_AuditMassnahme(id)
     )
     """,
 
@@ -585,6 +596,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         datumMassnahme NVARCHAR(20),
         nameEigner NVARCHAR(255),
         statusMassnahmeID INT NOT NULL DEFAULT 1,
+        datumErfassung NVARCHAR(20),
         FOREIGN KEY (auditAbweichungID) REFERENCES STG_QM_AuditAbweichung(id),
         FOREIGN KEY (statusMassnahmeID) REFERENCES Look_QM_MassnahmenStatus(id)
     """),
@@ -599,6 +611,14 @@ SCHEMA_STATEMENTS_MSSQL = [
         FOREIGN KEY (auditMassnahmeID) REFERENCES STG_QM_AuditMassnahme(id),
         FOREIGN KEY (status) REFERENCES Look_QM_AuditStatus(id),
         FOREIGN KEY (statusNeu) REFERENCES Look_QM_AuditStatus(id)
+    """),
+    ("STG_QM_MassnahmeKommentar", """
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        auditMassnahmeID INT NOT NULL,
+        kommentarDatum NVARCHAR(20),
+        name NVARCHAR(255),
+        kommentar NVARCHAR(MAX),
+        FOREIGN KEY (auditMassnahmeID) REFERENCES STG_QM_AuditMassnahme(id)
     """),
     ("STG_QM_AuditCheckliste", """
         id INT IDENTITY(1,1) PRIMARY KEY,
@@ -660,6 +680,7 @@ def init_db():
     _migrate_anhang_dateiname_column()
     _migrate_auditresult_rename_info_column()
     _migrate_massnahme_status_column()
+    _migrate_massnahme_erfassungsdatum_column()
     _migrate_auditplanstatus_in_arbeit()
     _migrate_fix_auditplan_status_fk()
     _migrate_auditplan_prozess_to_junction()
@@ -928,6 +949,27 @@ def _migrate_massnahme_status_column():
                 cur.execute(
                     "ALTER TABLE STG_QM_AuditMassnahme ADD COLUMN statusMassnahmeID INTEGER NOT NULL DEFAULT 1"
                 )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_massnahme_erfassungsdatum_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditMassnahme.datumErfassung: Datum, an dem eine
+    Massnahme erfasst wurde (Spalte 'Datum der Erfassung' in der Liste 'Erfasste Massnahmen',
+    PopUp 'Massnahmen' unter 'Audit durchfuehren', Standardwert beim Anlegen = heute). Bei einer
+    bereits bestehenden Datenbank wird die Spalte per ALTER TABLE ergaenzt (bereits vorhandene
+    Massnahmen bleiben mit leerem Wert, da das tatsaechliche urspruengliche Erfassungsdatum nicht
+    rekonstruierbar ist). Bei Neuinstallationen enthaelt CREATE TABLE die Spalte bereits, hier
+    passiert dann nichts."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditMassnahme", "datumErfassung"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditMassnahme ADD datumErfassung NVARCHAR(20)")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditMassnahme ADD COLUMN datumErfassung TEXT")
             conn.commit()
     finally:
         conn.close()
@@ -1570,6 +1612,15 @@ def delete_audit_plan(plan_id):
         )
     """, (plan_id,))
     execute("""
+        DELETE FROM STG_QM_MassnahmeKommentar WHERE auditMassnahmeID IN (
+            SELECT m.id FROM STG_QM_AuditMassnahme m
+            JOIN STG_QM_AuditAbweichung a ON a.id = m.auditAbweichungID
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            JOIN STG_QM_AuditProofs pf ON pf.id = r.auditProofsId
+            WHERE pf.auditPlanId = ?
+        )
+    """, (plan_id,))
+    execute("""
         DELETE FROM STG_QM_AuditMassnahme WHERE auditAbweichungID IN (
             SELECT a.id FROM STG_QM_AuditAbweichung a
             JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
@@ -1793,6 +1844,14 @@ def delete_proof(proof_id):
     )
     execute("""
         DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID IN (
+            SELECT m.id FROM STG_QM_AuditMassnahme m
+            JOIN STG_QM_AuditAbweichung a ON a.id = m.auditAbweichungID
+            JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+            WHERE r.auditProofsId = ?
+        )
+    """, (proof_id,))
+    execute("""
+        DELETE FROM STG_QM_MassnahmeKommentar WHERE auditMassnahmeID IN (
             SELECT m.id FROM STG_QM_AuditMassnahme m
             JOIN STG_QM_AuditAbweichung a ON a.id = m.auditAbweichungID
             JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
@@ -2231,7 +2290,16 @@ def add_abweichung(result_id, abweichung, status_id, name_auditor, datum, name_e
     """, (result_id, abweichung, status_id, name_auditor, datum, name_eigner))
 
 
-def list_abweichungen(status_filter=None, programm_filter=None):
+def update_abweichung_status(abweichung_id, status_id):
+    """Status einer Abweichung (Look_QM_AuditStatus) direkt aendern - z.B. ueber die
+    aenderbare Status-Spalte in der Liste 'Abweichungen' (Seite 'Auditabweichungen'). Zu
+    unterscheiden vom berechneten Abweichungs-Status ('in Arbeit'/'fertig', siehe
+    compute_abweichung_status), der NICHT manuell setzbar ist - dies hier ist der eigentliche,
+    frei waehlbare Status (z.B. 'offen'/'geschlossen')."""
+    execute("UPDATE STG_QM_AuditAbweichung SET abweichungStatus=? WHERE id=?", (status_id, abweichung_id))
+
+
+def list_abweichungen(status_filter=None, programm_filter=None, eigner_filter=None):
     sql = """
         SELECT a.*, s.auditStatus AS statusName,
                r.antwort AS ergebnisAntwort, pf.auditFrage, pf.normKapitel,
@@ -2251,10 +2319,25 @@ def list_abweichungen(status_filter=None, programm_filter=None):
     if programm_filter:
         clauses.append("prog.id = ?")
         params.append(programm_filter)
+    if eigner_filter:
+        clauses.append("a.nameEigner = ?")
+        params.append(eigner_filter)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY a.id DESC"
     return query(sql, tuple(params))
+
+
+def list_abweichung_eigner_namen():
+    """Distinkte, bereits erfasste Werte aus STG_QM_AuditAbweichung.nameEigner - fuer den
+    Filter [Eigner] in der Liste 'Abweichungen' (Seite 'Auditabweichungen'), analog zum
+    bestehenden Filter [Auditprogramm]/[Status]."""
+    rows = query("""
+        SELECT DISTINCT nameEigner FROM STG_QM_AuditAbweichung
+        WHERE nameEigner IS NOT NULL AND nameEigner <> ''
+        ORDER BY nameEigner
+    """)
+    return [r["nameEigner"] for r in rows]
 
 
 def get_abweichung(abweichung_id):
@@ -2278,9 +2361,14 @@ def compute_abweichung_status(massnahmen):
 
 def delete_abweichung(abweichung_id):
     """Loescht eine einzelne Abweichung (PopUp 'Abweichung ... hinzufuegen' unter 'Audit
-    durchfuehren') inkl. aller dazu erfassten Massnahmen und deren Status-Historie."""
+    durchfuehren') inkl. aller dazu erfassten Massnahmen, deren Status-Historie und Kommentare."""
     execute("""
         DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID IN (
+            SELECT id FROM STG_QM_AuditMassnahme WHERE auditAbweichungID = ?
+        )
+    """, (abweichung_id,))
+    execute("""
+        DELETE FROM STG_QM_MassnahmeKommentar WHERE auditMassnahmeID IN (
             SELECT id FROM STG_QM_AuditMassnahme WHERE auditAbweichungID = ?
         )
     """, (abweichung_id,))
@@ -2288,30 +2376,34 @@ def delete_abweichung(abweichung_id):
     execute("DELETE FROM STG_QM_AuditAbweichung WHERE id = ?", (abweichung_id,))
 
 
-def add_massnahme(abweichung_id, massnahme, datum, name_eigner):
+def add_massnahme(abweichung_id, massnahme, datum, name_eigner, datum_erfassung=None):
     """Erfasst eine neue Massnahme zu einer Abweichung inkl. initialem Status-Eintrag
-    "Erfasst". Die neue Massnahme-id wird bewusst NICHT ueber die generische execute()-
-    Hilfsfunktion (SCOPE_IDENTITY(), siehe _get_last_insert_id) ermittelt, sondern - analog zu
-    create_audit_plan() - direkt per OUTPUT INSERTED.id (MSSQL) bzw. cur.lastrowid (SQLite):
-    SCOPE_IDENTITY() lieferte in der produktiven SQL-Server-Umgebung fuer diesen INSERT NULL,
-    wodurch der nachfolgende INSERT in STG_QM_StatusMassnahme mit NULL statt der echten
-    Massnahme-id versucht wurde - dort ist auditMassnahmeID aber NOT NULL (IntegrityError)."""
+    "Erfasst". datum_erfassung ("Datum der Erfassung", Spalte in der Liste 'Erfasste Massnahmen'
+    im PopUp 'Massnahmen' unter 'Audit durchfuehren') ist optional - der Aufrufer dort setzt
+    hierfuer per Default das heutige Datum; andere Aufrufer (z.B. Seite 'Auditabweichungen',
+    ohne dieses Feld) lassen es weg, dann bleibt die Spalte leer (NULL). Die neue Massnahme-id
+    wird bewusst NICHT ueber die generische execute()-Hilfsfunktion (SCOPE_IDENTITY(), siehe
+    _get_last_insert_id) ermittelt, sondern - analog zu create_audit_plan() - direkt per OUTPUT
+    INSERTED.id (MSSQL) bzw. cur.lastrowid (SQLite): SCOPE_IDENTITY() lieferte in der produktiven
+    SQL-Server-Umgebung fuer diesen INSERT NULL, wodurch der nachfolgende INSERT in
+    STG_QM_StatusMassnahme mit NULL statt der echten Massnahme-id versucht wurde - dort ist
+    auditMassnahmeID aber NOT NULL (IntegrityError)."""
     conn = get_connection()
     try:
         cur = conn.cursor()
         if config.DB_BACKEND == "mssql":
             cur.execute("""
-                INSERT INTO STG_QM_AuditMassnahme (auditAbweichungID, massnahme, datumMassnahme, nameEigner)
+                INSERT INTO STG_QM_AuditMassnahme (auditAbweichungID, massnahme, datumMassnahme, nameEigner, datumErfassung)
                 OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?)
-            """, (abweichung_id, massnahme, datum, name_eigner))
+                VALUES (?, ?, ?, ?, ?)
+            """, (abweichung_id, massnahme, datum, name_eigner, datum_erfassung))
             row = cur.fetchone()
             m_id = row[0] if row else None
         else:
             cur.execute("""
-                INSERT INTO STG_QM_AuditMassnahme (auditAbweichungID, massnahme, datumMassnahme, nameEigner)
-                VALUES (?, ?, ?, ?)
-            """, (abweichung_id, massnahme, datum, name_eigner))
+                INSERT INTO STG_QM_AuditMassnahme (auditAbweichungID, massnahme, datumMassnahme, nameEigner, datumErfassung)
+                VALUES (?, ?, ?, ?, ?)
+            """, (abweichung_id, massnahme, datum, name_eigner, datum_erfassung))
             m_id = cur.lastrowid
         # Initialer Status-Eintrag "Erfasst" (id 1)
         cur.execute("""
@@ -2344,7 +2436,54 @@ def update_massnahme_status(massnahme_id, status_id):
     execute("UPDATE STG_QM_AuditMassnahme SET statusMassnahmeID = ? WHERE id = ?", (status_id, massnahme_id))
 
 
-def list_massnahmen(status_filter=None):
+def update_massnahme(massnahme_id, massnahme, datum, name_eigner, datum_erfassung=None):
+    """Aktualisiert Ma&szlig;nahmentext/Termin/Eigner/Datum der Erfassung einer bestehenden
+    Massnahme - Button [bearbeiten] in der Spalte [Aktion] der Liste 'Erfasste Massnahmen'
+    (PopUp 'Massnahmen' unter 'Audit durchfuehren'): schaltet dort die Zeile direkt in der
+    Tabelle auf Eingabemodus um, statt ein eigenes PopUp zu oeffnen. Der Status (siehe
+    update_massnahme_status) bleibt davon unberuehrt."""
+    execute(
+        "UPDATE STG_QM_AuditMassnahme SET massnahme=?, datumMassnahme=?, nameEigner=?, datumErfassung=? WHERE id=?",
+        (massnahme, datum, name_eigner, datum_erfassung, massnahme_id),
+    )
+
+
+def delete_massnahme(massnahme_id):
+    """Loescht eine einzelne Massnahme (Button [loeschen] in der Spalte [Aktion] der Liste
+    'Erfasste Massnahmen', PopUp 'Massnahmen' unter 'Audit durchfuehren') inkl. ihrer
+    Status-Historie und Kommentare - analog zu delete_abweichung()."""
+    execute("DELETE FROM STG_QM_StatusMassnahme WHERE auditMassnahmeID = ?", (massnahme_id,))
+    execute("DELETE FROM STG_QM_MassnahmeKommentar WHERE auditMassnahmeID = ?", (massnahme_id,))
+    execute("DELETE FROM STG_QM_AuditMassnahme WHERE id = ?", (massnahme_id,))
+
+
+def add_massnahme_kommentar(massnahme_id, datum, name, kommentar):
+    """Erfasst einen Kommentar zu einer Massnahme (Button [Kommentieren] in der Spalte [Aktion]
+    der Liste 'Erfasste Massnahmen', PopUp 'Massnahmen' unter 'Audit durchfuehren'). Der
+    Kommentartext wird per Richtext-Editor erfasst (siehe _macros_richtext.html), analog zum
+    Abweichungstext."""
+    return execute(
+        "INSERT INTO STG_QM_MassnahmeKommentar (auditMassnahmeID, kommentarDatum, name, kommentar) "
+        "VALUES (?, ?, ?, ?)",
+        (massnahme_id, datum, name, kommentar),
+    )
+
+
+def list_massnahme_kommentare(massnahme_id):
+    """Liefert alle Kommentare zu einer Massnahme, neueste zuerst."""
+    return query(
+        "SELECT * FROM STG_QM_MassnahmeKommentar WHERE auditMassnahmeID = ? ORDER BY id DESC",
+        (massnahme_id,),
+    )
+
+
+def list_massnahmen(status_filter=None, abweichung_filter=None):
+    """abweichung_filter schraenkt auf die Massnahmen EINER Abweichung ein - genutzt vom Button
+    'Massnahmen ansehen' in der Liste 'Abweichungen' (Seite 'Auditabweichungen'), damit dort nur
+    die tatsaechlich dieser Abweichung zugeordneten Massnahmen erscheinen (Fachlichkeit: ein
+    Proof kann mehrere Abweichungen haben, eine Abweichung kann mehrere Massnahmen haben - jede
+    Massnahme gehoert dabei immer zu genau einer Abweichung, siehe STG_QM_AuditMassnahme.
+    auditAbweichungID)."""
     rows = query("""
         SELECT m.*, a.abweichung, a.id AS abweichungId
         FROM STG_QM_AuditMassnahme m
@@ -2362,6 +2501,8 @@ def list_massnahmen(status_filter=None):
         m["aktuellerStatusName"] = last["statusNeuName"] if last else "Erfasst"
     if status_filter:
         rows = [r for r in rows if str(r["aktuellerStatusId"]) == str(status_filter)]
+    if abweichung_filter:
+        rows = [r for r in rows if str(r["abweichungId"]) == str(abweichung_filter)]
     return rows
 
 
