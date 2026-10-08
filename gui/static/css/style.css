@@ -209,6 +209,15 @@ a:hover { text-decoration: underline; }
 
 /* ---------------- Headings ---------------- */
 .ekey-h1 { font-size: 20px; color: var(--ekey-primary); margin: 0 0 12px 0; }
+/* Fachbereich-Anzeige rechts neben dem Seitentitel (Seite "Audit durchfuehren - Plan #...") */
+.ekey-h1-with-badge { display: flex; align-items: center; gap: 12px; }
+.ekey-badge-fachbereich {
+  background: var(--ekey-primary);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 3px 12px;
+}
 .ekey-h2 { font-size: 14px; color: var(--ekey-primary); margin: 0 0 8px 0; border-bottom: 1px solid var(--ekey-border); padding-bottom: 4px; }
 .ekey-group-heading {
   font-size: 11px;
@@ -290,6 +299,28 @@ a:hover { text-decoration: underline; }
   color: #FFFFFF;
 }
 .ekey-btn-delete svg { display: block; }
+/* Bleistift-Button "Bearbeiten" (neben [Maßnahme] und [löschen] in der Spalte Aktion) */
+.ekey-btn-edit {
+  min-width: 26px;
+  min-height: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+.ekey-btn-edit svg { display: block; margin: 0 auto; }
+/* Quadratischer Button (z.B. [<] zurueck), Seitenlaenge = Hoehe eines Standard-.ekey-btn (32px),
+   also gleich hoch wie [+Proof manuell hinzufuegen] */
+.ekey-btn-square {
+  min-width: 32px;
+  min-height: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
 /* Blauer Button "+Proof manuell hinzufuegen" (Seite "Audit durchfuehren"): Rahmen + Schrift in
    RGB(20,60,200), analog zum Hover-Verhalten von .ekey-btn-danger/.ekey-btn (Flaeche fuellt sich
    beim Hover in derselben Farbe, Schrift wird weiss). */
@@ -338,6 +369,10 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 10px;
 }
 .ekey-form-row-wide { grid-column: span 3; }
+/* Variante mit 4 Spalten (z.B. PopUp "Abweichung - Plan": Abweichung/Eigner/Bewertung/Datum in
+   einer Zeile unter der Beschreibung). */
+.ekey-form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.ekey-form-grid-4 .ekey-form-row-wide { grid-column: span 4; }
 .ekey-form-row { display: flex; flex-direction: column; gap: 2px; }
 .ekey-form-actions { margin-top: 8px; display: flex; gap: 8px; }
 .ekey-inline-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
@@ -392,7 +427,9 @@ input:focus, select:focus, textarea:focus {
 }
 .ekey-hover-tooltip-content {
   display: none;
-  position: absolute;
+  /* fixed (Position wird per JS beim Ueberfahren gesetzt, siehe app.js), damit der Tooltip nicht
+     vom scrollenden Inhaltsbereich eines PopUps (overflow) abgeschnitten wird */
+  position: fixed;
   z-index: 100;
   top: 100%;
   left: 0;
@@ -628,7 +665,8 @@ input:focus, select:focus, textarea:focus {
   .ekey-body { flex-direction: column; }
   .ekey-sidebar, .ekey-rightbar, .ekey-content { width: 100%; }
   .ekey-form-grid { grid-template-columns: 1fr; }
-  .ekey-form-row-wide { grid-column: span 1; }
+  .ekey-form-row-wide, .ekey-form-grid-4 .ekey-form-row-wide { grid-column: span 1; }
+  .ekey-form-grid-4 { grid-template-columns: 1fr; }
   .ekey-grid-2 { grid-template-columns: 1fr; }
   .ekey-proof-action-row { grid-template-columns: 1fr; }
   /* Auf schmalen Bildschirmen keine Rechts-/Unten-Versetzung - sonst droht das PopUp seitlich
@@ -709,12 +747,16 @@ tr.ekey-row-editing > td > div.ekey-massnahme-edit { display: flex; }
   font-size: 7.5px;
   padding: 1.5px 4.5px;
 }
+.ekey-btn-mini.ekey-btn-edit,
 .ekey-btn-mini.ekey-btn-delete {
   min-width: 19.5px;
   min-height: 19.5px;
   width: 19.5px;
   height: 19.5px;
+  padding: 0;
+  box-sizing: border-box;
 }
+.ekey-btn-mini.ekey-btn-edit svg { width: 11px; height: 11px; }
 .ekey-modal {
   background: #FFFFFF;
   border: 1px solid var(--ekey-border);
@@ -804,3 +846,48 @@ tr.ekey-row-editing > td > div.ekey-massnahme-edit { display: flex; }
 /* ---------------- Filterzeile (z.B. Auditprogramm-Auswahl vor Listenanzeige) ---------------- */
 .ekey-filter-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .ekey-filter-row .ekey-form-row { min-width: 280px; }
+
+/* ==========================================================================
+   Gilt fuer die ganze Anwendung: Buttons in der Spalte "Aktion" von Listen
+   - alle gleich hoch (vertikal): Standard 26px, kompakte Variante (.ekey-btn-mini) 19.5px
+   - alle auf gleicher vertikaler Position (in einer Reihe, mittig ausgerichtet)
+   - horizontal keine Groessenvorgabe (Breite richtet sich nach dem Inhalt)
+   ========================================================================== */
+.ekey-table td .ekey-btn-small,
+.ekey-table td .ekey-btn-delete,
+.ekey-table td .ekey-btn-edit {
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
+  line-height: 1;
+}
+.ekey-table td .ekey-btn-mini {
+  height: 19.5px;
+  min-height: 19.5px;
+  max-height: 19.5px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.ekey-table td form {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0;
+}
+.ekey-table td .ekey-actions-row { align-items: center; }
+.ekey-table td:has(> .ekey-btn-small, > .ekey-btn-delete, > .ekey-btn-edit, > form > .ekey-btn-delete) {
+  white-space: nowrap;
+}
+.ekey-table td:has(> .ekey-btn-small, > .ekey-btn-delete, > .ekey-btn-edit, > form > .ekey-btn-delete) > * {
+  vertical-align: middle;
+}
+
+/* Fachbereich-Anzeige im Titel: ganz rechts im Arbeitsbereich, gruen (ekey-Logo) */
+.ekey-badge-fachbereich {
+  margin-left: auto;
+  background: rgb(200, 211, 7);
+}

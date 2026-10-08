@@ -1054,8 +1054,9 @@ def audit_result_abweichung_add(result_id):
         abort(404)
 
     bewertung_id = request.form.get("auditBewertungID")
-    abweichung_text = request.form.get("abweichung", "").strip()
-    eigner = request.form.get("nameEigner", "").strip()
+    abweichung_text = request.form.get("abweichung", "").strip()  # Beschreibung der Abweichung (Richtext)
+    titel = request.form.get("abweichungTitel", "").strip()       # Abweichung (Kurzbezeichnung)
+    eigner = request.form.get("nameEigner", "").strip()           # Eigner
     datum = request.form.get("datumErfasst") or datetime.now().strftime("%Y-%m-%d")
 
     if bewertung_id:
@@ -1063,14 +1064,34 @@ def audit_result_abweichung_add(result_id):
 
     if abweichung_text and eigner:
         name_auditor = result.get("nameAuditor") or ""
-        db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner)
+        db.add_abweichung(result_id, abweichung_text, 1, name_auditor, datum, eigner, titel)
         flash("Abweichung erfasst.", "success")
     else:
-        flash("Bitte Abweichungstext und Eigner angeben.", "error")
+        flash("Bitte Beschreibung der Abweichung und Eigner angeben.", "error")
 
     return redirect(url_for(
         "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
         proofOpen=proof["id"], abweichungenOpen=proof["id"],
+    ))
+
+
+def _massnahmen_redirect(proof, abweichung_id, kommentare_massnahme_id=None):
+    """Rueckkehr nach einer Massnahmen-Aktion: je nach Herkunft (Hidden-Feld returnTo) zur Seite
+    'Auditabweichungen' (Filter bleiben erhalten) oder zur Seite 'Audit durchfuehren - Plan'. In
+    beiden Faellen oeffnet sich das PopUp 'Massnahmen' der Abweichung wieder."""
+    if request.form.get("returnTo") == "abweichungen":
+        return redirect(url_for(
+            "gui.abweichungen",
+            status=request.form.get("statusFilter") or None,
+            programmId=request.form.get("programmFilter") or None,
+            eigner=request.form.get("eignerFilter") or None,
+            massnahmenAbweichungOpen=abweichung_id,
+            massnahmeKommentareOpen=kommentare_massnahme_id,
+        ))
+    return redirect(url_for(
+        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung_id,
+        massnahmeKommentareOpen=kommentare_massnahme_id,
     ))
 
 
@@ -1093,10 +1114,7 @@ def audit_durchfuehren_massnahme_add(proof_id):
     else:
         flash("Bitte Abweichung, Maßnahme und Eigner angeben.", "error")
 
-    return redirect(url_for(
-        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
-        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung_id,
-    ))
+    return _massnahmen_redirect(proof, abweichung_id)
 
 
 @gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/status/update", methods=["POST"])
@@ -1120,10 +1138,7 @@ def audit_massnahme_status_update(massnahme_id):
         db.update_massnahme_status(massnahme_id, status_id)
         flash("Status der Maßnahme aktualisiert.", "success")
 
-    return redirect(url_for(
-        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
-        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
-    ))
+    return _massnahmen_redirect(proof, abweichung["id"])
 
 
 @gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/edit", methods=["POST"])
@@ -1155,10 +1170,7 @@ def audit_massnahme_edit(massnahme_id):
     else:
         flash("Bitte Maßnahme und Eigner angeben.", "error")
 
-    return redirect(url_for(
-        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
-        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
-    ))
+    return _massnahmen_redirect(proof, abweichung["id"])
 
 
 @gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/kommentar/add", methods=["POST"])
@@ -1189,11 +1201,7 @@ def audit_massnahme_kommentar_add(massnahme_id):
     else:
         flash("Bitte Name und Kommentar angeben.", "error")
 
-    return redirect(url_for(
-        "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
-        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
-        massnahmeKommentareOpen=massnahme_id,
-    ))
+    return _massnahmen_redirect(proof, abweichung["id"], massnahme_id)
 
 
 @gui.route("/audit-durchfuehren/massnahme/<int:massnahme_id>/delete", methods=["POST"])
@@ -1217,9 +1225,48 @@ def audit_massnahme_delete(massnahme_id):
     db.delete_massnahme(massnahme_id)
     flash("Maßnahme geloescht.", "success")
 
+    return _massnahmen_redirect(proof, abweichung["id"])
+
+
+@gui.route("/audit-durchfuehren/abweichung/<int:abweichung_id>/edit", methods=["POST"])
+@security.login_required
+def audit_abweichung_edit(abweichung_id):
+    """Button [Bearbeiten] (Bleistift) in der Spalte [Aktion] der Liste 'Abweichungen' - im PopUp
+    'Abweichung - Plan' und auf der Seite 'Auditabweichungen' (dann returnTo=abweichungen)."""
+    abweichung = db.get_abweichung(abweichung_id)
+    if not abweichung:
+        abort(404)
+    result = db.get_result(abweichung["auditResultID"])
+    if not result:
+        abort(404)
+    proof = db.get_proof(result["auditProofsId"])
+    if not proof:
+        abort(404)
+
+    text = request.form.get("abweichung", "").strip()
+    titel = request.form.get("abweichungTitel", "").strip()
+    eigner = request.form.get("nameEigner", "").strip()
+    datum = request.form.get("datumErfasst") or abweichung.get("datumErfasst") or datetime.now().strftime("%Y-%m-%d")
+    bewertung_id = request.form.get("auditBewertungID")
+
+    if text and eigner:
+        db.update_abweichung(abweichung_id, text, titel, eigner, datum)
+        if bewertung_id:
+            db.update_result_bewertung(result["id"], bewertung_id)
+        flash("Abweichung aktualisiert.", "success")
+    else:
+        flash("Bitte Beschreibung der Abweichung und Eigner angeben.", "error")
+
+    if request.form.get("returnTo") == "abweichungen":
+        return redirect(url_for(
+            "gui.abweichungen",
+            status=request.form.get("statusFilter") or None,
+            programmId=request.form.get("programmFilter") or None,
+            eigner=request.form.get("eignerFilter") or None,
+        ))
     return redirect(url_for(
         "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
-        proofOpen=proof["id"], abweichungenOpen=proof["id"], massnahmenAbweichungOpen=abweichung["id"],
+        proofOpen=proof["id"], abweichungenOpen=proof["id"],
     ))
 
 
@@ -1239,6 +1286,13 @@ def audit_abweichung_delete(abweichung_id):
     db.delete_abweichung(abweichung_id)
     flash("Abweichung geloescht.", "success")
 
+    if request.form.get("returnTo") == "abweichungen":
+        return redirect(url_for(
+            "gui.abweichungen",
+            status=request.form.get("statusFilter") or None,
+            programmId=request.form.get("programmFilter") or None,
+            eigner=request.form.get("eignerFilter") or None,
+        ))
     return redirect(url_for(
         "gui.audit_durchfuehren_detail", plan_id=proof["auditPlanId"],
         proofOpen=proof["id"], abweichungenOpen=proof["id"],
@@ -1458,40 +1512,36 @@ def abweichungen():
     programm_filter = request.args.get("programmId")
     eigner_filter = request.args.get("eigner")
     liste = db.list_abweichungen(status_filter, programm_filter, eigner_filter)
+    massnahmen_by_abweichung = {}
+    kommentare_by_massnahme = {}
+    for a in liste:
+        ms = db.list_massnahmen_for_result(a["auditResultID"]) if a.get("auditResultID") else []
+        for m in ms:
+            if m["abweichungId"] == a["id"]:
+                massnahmen_by_abweichung.setdefault(a["id"], []).append(m)
+                kommentare_by_massnahme[m["id"]] = db.list_massnahme_kommentare(m["id"])
     return render_template(
         "abweichungen.html",
         abweichungen=liste,
+        bewertungen=db.get_lookup("Look_QM_AuditBewertung"),
         audit_status=db.get_lookup("Look_QM_AuditStatus"),
         status_filter=status_filter,
         programme=db.list_audit_programme(),
         programm_filter=programm_filter,
         eigner_namen=db.list_abweichung_eigner_namen(),
         eigner_filter=eigner_filter,
+        massnahmen_abweichung_open_id=request.args.get("massnahmenAbweichungOpen"),
+        massnahme_kommentare_open_id=request.args.get("massnahmeKommentareOpen"),
+        massnahmen_status=db.get_lookup("Look_QM_MassnahmenStatus"),
+        heute=datetime.now().strftime("%Y-%m-%d"),
+        massnahmen_by_abweichung=massnahmen_by_abweichung,
+        kommentare_by_massnahme=kommentare_by_massnahme,
         kpis={
             "abweichungen_gesamt": kpi.anzahl_abweichungen_gesamt(),
             "massnahmen_gesamt": kpi.anzahl_massnahmen_gesamt(),
             "erfuellungsgrad_massnahmen": kpi.erfuellungsgrad_massnahmen(),
         },
     )
-
-
-@gui.route("/abweichungen/<int:abweichung_id>/massnahme/add", methods=["POST"])
-@security.login_required
-def abweichung_massnahme_add(abweichung_id):
-    massnahme = request.form.get("massnahme", "")
-    datum = request.form.get("datumMassnahme") or datetime.now().strftime("%Y-%m-%d")
-    eigner = request.form.get("nameEigner", "")
-    if massnahme and eigner:
-        db.add_massnahme(abweichung_id, massnahme, datum, eigner)
-        flash("Maßnahme hinzugefuegt.", "success")
-    else:
-        flash("Maßnahme und Eigner sind Pflichtfelder.", "error")
-    return redirect(url_for(
-        "gui.abweichungen",
-        status=request.form.get("statusFilter") or None,
-        programmId=request.form.get("programmFilter") or None,
-        eigner=request.form.get("eignerFilter") or None,
-    ))
 
 
 @gui.route("/abweichungen/<int:abweichung_id>/status", methods=["POST"])

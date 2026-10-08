@@ -1,0 +1,67 @@
+{# PopUp "Abweichung bearbeiten" / "Neue Abweichung erfassen" - gleiches PopUp, gemeinsam genutzt im
+   PopUp "Abweichung - Plan" (Audit durchfuehren) und auf der Seite "Auditabweichungen".
+   Erwartet: bewertungen, offset_class (z.B. 'ekey-modal-offset-2' oder ''), return_to ('' | 'abweichungen'),
+   optional status_filter/programm_filter/eigner_filter.
+   Bearbeiten: a (Abweichung inkl. auditBewertungID), optional result.
+   Neu (neu=True): result (Ergebnis des Proofs), pf (Proof), heute. #}
+{% import "_macros_richtext.html" as rt %}
+{% if neu %}
+  {% set m_id = 'modalAbweichungNeu' ~ pf.id %}
+  {% set f_id = 'formAbweichungNeu' ~ pf.id %}
+  {% set sfx = 'Neu' ~ pf.id %}
+  {% set f_action = url_for('gui.audit_result_abweichung_add', result_id=result.id) %}
+  {% set v_text = '' %}{% set v_titel = '' %}{% set v_eigner = '' %}{% set v_datum = heute %}
+  {% set v_bew = result.auditBewertungID %}
+  {% set m_title = 'Neue Abweichung erfassen - Plan #' ~ plan.id ~ ' -> Frage #' ~ pf.id %}
+{% else %}
+  {% set m_id = 'modalAbweichungBearbeiten' ~ a.id %}
+  {% set f_id = 'formAbweichungBearbeiten' ~ a.id %}
+  {% set sfx = a.id %}
+  {% set f_action = url_for('gui.audit_abweichung_edit', abweichung_id=a.id) %}
+  {% set v_text = a.abweichung or '' %}{% set v_titel = a.abweichungTitel or '' %}
+  {% set v_eigner = a.nameEigner or '' %}{% set v_datum = a.datumErfasst %}
+  {% set v_bew = a.auditBewertungID or (result.auditBewertungID if result else None) %}
+  {% set m_title = 'Abweichung bearbeiten - #' ~ a.id %}
+{% endif %}
+<div id="{{ m_id }}" class="ekey-modal-overlay">
+<div class="ekey-modal {{ offset_class }}" style="max-width: 800px;">
+<div class="ekey-modal-header">
+    <h2>{{ m_title }}</h2>
+    <div class="ekey-form-actions" style="margin: 0;">
+        <button type="submit" form="{{ f_id }}" class="ekey-btn ekey-btn-primary">Speichern</button>
+        <button type="button" class="ekey-btn" onclick="ekeyCloseModal('{{ m_id }}')">Schlie&szlig;en</button>
+    </div>
+</div>
+<div class="ekey-modal-body">
+    <form id="{{ f_id }}" method="post" action="{{ f_action }}">
+        <input type="hidden" name="returnTo" value="{{ return_to }}">
+        <input type="hidden" name="statusFilter" value="{{ status_filter or '' }}">
+        <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
+        <input type="hidden" name="eignerFilter" value="{{ eigner_filter or '' }}">
+        <div class="ekey-form-grid ekey-form-grid-4">
+            {{ rt.richtext_field('abweichung', 'Beschreibung der Abweichung', v_text) }}
+            <div class="ekey-form-row">
+                <label for="editTitel{{ sfx }}">Abweichung</label>
+                <input type="text" id="editTitel{{ sfx }}" name="abweichungTitel" value="{{ v_titel }}">
+            </div>
+            <div class="ekey-form-row">
+                <label for="editEigner{{ sfx }}">Eigner</label>
+                <input type="text" id="editEigner{{ sfx }}" name="nameEigner" value="{{ v_eigner }}" required>
+            </div>
+            <div class="ekey-form-row">
+                <label for="editBewertung{{ sfx }}">Bewertung</label>
+                <select id="editBewertung{{ sfx }}" name="auditBewertungID" required>
+                    {% for b in bewertungen %}
+                    <option value="{{ b.id }}" {% if v_bew|string == b.id|string %}selected{% endif %}>{{ b.auditResult }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ekey-form-row">
+                <label for="editDatum{{ sfx }}">Datum</label>
+                <input type="date" id="editDatum{{ sfx }}" name="datumErfasst" value="{{ v_datum }}">
+            </div>
+        </div>
+    </form>
+</div>
+</div>
+</div>

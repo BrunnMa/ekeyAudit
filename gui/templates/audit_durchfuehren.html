@@ -26,15 +26,17 @@
 } %}
 
 {% if detail_mode %}
-    <h1 class="ekey-h1">Audit durchfuehren - Plan #{{ plan.id }}</h1>
-    <p class="ekey-muted">Fachbereich: {{ plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
+    <h1 class="ekey-h1 ekey-h1-with-badge">Audit durchfuehren - Plan #{{ plan.id }}{% if plan.fachbereichName %}<span class="ekey-badge-fachbereich" title="Fachbereich">{{ plan.fachbereichName }}</span>{% endif %}</h1>
+    <p class="ekey-muted">Fachbereich: {{ plan.fachbereichName or plan.fachbereich }} | Verantwortlich: {{ plan.verantwortlich }}</p>
 
     <div class="ekey-panel">
         <div class="ekey-form-actions" style="justify-content: space-between; margin-bottom: 8px;">
-            <button type="button" class="ekey-btn ekey-btn-blue" onclick="ekeyOpenModal('modalNeuerProofDurchfuehren')">+Proof manuell hinzufuegen</button>
+            <div class="ekey-form-actions" style="margin: 0;">
+                <a href="{{ url_for('gui.audit_durchfuehren', programmId=plan.auditProgrammId) }}" class="ekey-btn ekey-btn-square" title="Zurueck zur Uebersicht">&lt;</a>
+                <button type="button" class="ekey-btn ekey-btn-blue" onclick="ekeyOpenModal('modalNeuerProofDurchfuehren')">+Proof manuell hinzufuegen</button>
+            </div>
             <div class="ekey-form-actions" style="margin: 0;">
                 <a href="{{ url_for('gui.audit_durchfuehren_proofs_export', plan_id=plan.id) }}" class="ekey-btn" download>ExcelExport</a>
-                <a href="{{ url_for('gui.audit_durchfuehren', programmId=plan.auditProgrammId) }}" class="ekey-btn">Zurueck zur Uebersicht</a>
             </div>
         </div>
         <h2 class="ekey-h2">Proofs</h2>
@@ -65,7 +67,7 @@
                     <td class="ekey-td-center">{{ proof_massn_count.get(pf.id, 0) }}</td>
                     <td>
                         <div class="ekey-actions-row">
-                            <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalProof{{ pf.id }}')">Bearbeiten</button>
+                            <button type="button" class="ekey-btn ekey-btn-small ekey-btn-edit" onclick="ekeyOpenModal('modalProof{{ pf.id }}')" title="Bearbeiten">{{ btn.edit_icon() }}</button>
                             <form method="post" action="{{ url_for('gui.audit_durchfuehren_proof_delete', proof_id=pf.id) }}" style="display:inline">
                                 <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen" onclick="return confirm('Diesen Proof wirklich loeschen? Alle zugehoerigen Ergebnisse, Abweichungen und Ma&szlig;nahmen werden ebenfalls geloescht.');">{{ btn.delete_icon() }}</button>
                             </form>
@@ -275,10 +277,10 @@
     </div>
 
     <div id="modalAbweichungen{{ pf.id }}" class="ekey-modal-overlay{% if abweichungen_open_id and abweichungen_open_id|string == pf.id|string %} ekey-modal-open{% endif %}">
-    <div class="ekey-modal ekey-modal-offset-1" style="max-width: 800px;">
+    <div class="ekey-modal ekey-modal-offset-1" style="max-width: 1000px;">
     <div class="ekey-modal-header">
         <h2>Abweichung - Plan #{{ plan.id }} -&gt; Frage #{{ pf.id }} hinzufuegen</h2>
-        <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalAbweichungen{{ pf.id }}')" title="Schliessen">&times;</button>
+        <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalAbweichungen{{ pf.id }}')">Schlie&szlig;en</button>
     </div>
     <div class="ekey-modal-body">
         {% if not result %}
@@ -288,18 +290,26 @@
 
         <h4 class="ekey-group-heading">Abweichungen</h4>
         <table class="ekey-table">
-            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Erfasst am</th><th>Status</th><th>Ma&szlig;nahmen</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Abweichung</th><th>Eigner</th><th>Bewertung</th><th>Datum</th><th>Status</th><th>Ma&szlig;nahmen</th><th>Aktion</th></tr></thead>
             <tbody>
             {% for a in proof_abweichungen %}
                 {% set a_status = abweichung_status_by_id.get(a.id, 'in Arbeit') %}
                 <tr>
-                    <td class="ekey-richtext-display">{{ a.abweichung | safe }}</td>
+                    <td class="ekey-hover-tooltip" style="font-weight: bold;">
+                        {{ a.abweichungTitel or '' }}
+                        <span class="ekey-hover-tooltip-content ekey-richtext-display" style="font-weight: normal;">
+                            <strong>Beschreibung der Abweichung:</strong><br>
+                            {{ a.abweichung | safe }}
+                        </span>
+                    </td>
                     <td>{{ a.nameEigner }}</td>
+                    <td>{{ result.bewertungName or '-' }}</td>
                     <td>{{ a.datumErfasst }}</td>
                     <td style="color: {{ abweichung_status_farben.get(a_status, '') }}; font-weight: bold;">{{ a_status }}</td>
                     <td>{{ massnahmen_by_abweichung.get(a.id, [])|length }}</td>
                     <td>
                         <div class="ekey-actions-row">
+                            <button type="button" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten" onclick="ekeyOpenModal('modalAbweichungBearbeiten{{ a.id }}')">{{ btn.edit_icon() }}</button>
                             <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalMassnahmenAbweichung{{ a.id }}')">Ma&szlig;nahmen</button>
                             <form method="post" action="{{ url_for('gui.audit_abweichung_delete', abweichung_id=a.id) }}" style="display:inline;">
                                 <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen" onclick="return confirm('Abweichung und alle zugehoerigen Ma&szlig;nahmen wirklich loeschen?');">{{ btn.delete_icon() }}</button>
@@ -308,174 +318,20 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="6">Noch keine Abweichung erfasst.</td></tr>
+                <tr><td colspan="7">Noch keine Abweichung erfasst.</td></tr>
             {% endfor %}
             </tbody>
         </table>
 
-        <hr class="ekey-form-hr">
         <p class="ekey-muted">Aktuelle Bewertung: {{ result.bewertungName or '-' }}</p>
-
-        <h4 class="ekey-group-heading">Neue Abweichung erfassen</h4>
-        <form method="post" action="{{ url_for('gui.audit_result_abweichung_add', result_id=result.id) }}">
-            <div class="ekey-form-grid">
-                {{ rt.richtext_field('abweichung', 'Beschreibung der Abweichung') }}
-                <div class="ekey-form-row">
-                    <label for="nameEigner{{ pf.id }}">Abweichung</label>
-                    <input type="text" id="nameEigner{{ pf.id }}" name="nameEigner">
-                </div>
-                <div class="ekey-form-row">
-                    <label for="auditBewertungID{{ pf.id }}">Bewertung</label>
-                    <select id="auditBewertungID{{ pf.id }}" name="auditBewertungID" required>
-                        {% for b in bewertungen %}
-                        <option value="{{ b.id }}" {% if result.auditBewertungID|string == b.id|string %}selected{% endif %}>{{ b.auditResult }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="ekey-form-row">
-                    <label for="datumErfasst{{ pf.id }}">Datum</label>
-                    <input type="date" id="datumErfasst{{ pf.id }}" name="datumErfasst" value="{{ heute }}">
-                </div>
-            </div>
-            <div class="ekey-form-actions">
-                <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
-                <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalAbweichungen{{ pf.id }}')">Schliessen</button>
-            </div>
-        </form>
+        <div class="ekey-form-actions" style="margin-top: 8px;">
+            <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyOpenModal('modalAbweichungNeu{{ pf.id }}')">Neue Abweichung</button>
+        </div>
+        {% with offset_class='ekey-modal-offset-2', return_to='', neu=True %}{% include "_modal_abweichung_edit.html" %}{% endwith %}
 
         {% for a in proof_abweichungen %}
-        <div id="modalMassnahmenAbweichung{{ a.id }}" class="ekey-modal-overlay{% if massnahmen_abweichung_open_id and massnahmen_abweichung_open_id|string == a.id|string %} ekey-modal-open{% endif %}">
-        <div class="ekey-modal ekey-modal-offset-2">
-        <div class="ekey-modal-header">
-            <h2>Ma&szlig;nahmen - Plan #{{ plan.id }} -&gt; Frage #{{ pf.id }} -&gt; Abweichung #{{ a.id }}</h2>
-            <div class="ekey-form-actions" style="margin: 0;">
-                <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalMassnahmenAbweichung{{ a.id }}')">Schlie&szlig;en</button>
-            </div>
-        </div>
-        <div class="ekey-modal-body">
-            <h4 class="ekey-group-heading">Erfasste Ma&szlig;nahmen</h4>
-            <table class="ekey-table">
-                <thead><tr><th>Datum der Erfassung</th><th style="width: 35%;">Ma&szlig;nahme</th><th>Termin</th><th>Eigner</th><th>Status</th><th>Aktion</th></tr></thead>
-                <tbody>
-                {% for m in massnahmen_by_abweichung.get(a.id, []) %}
-                    <tr id="massnahmeRow{{ m.id }}">
-                        <td>
-                            <span class="ekey-massnahme-view">{{ m.datumErfassung }}</span>
-                            <input class="ekey-massnahme-edit" type="date" form="formMassnahmeBearbeiten{{ m.id }}" name="datumErfassung" value="{{ m.datumErfassung }}">
-                        </td>
-                        <td>
-                            <span class="ekey-massnahme-view">{{ m.massnahme }}</span>
-                            <textarea class="ekey-massnahme-edit" form="formMassnahmeBearbeiten{{ m.id }}" name="massnahme" rows="2">{{ m.massnahme }}</textarea>
-                        </td>
-                        <td>
-                            <span class="ekey-massnahme-view">{{ m.datumMassnahme }}</span>
-                            <input class="ekey-massnahme-edit" type="date" form="formMassnahmeBearbeiten{{ m.id }}" name="datumMassnahme" value="{{ m.datumMassnahme }}">
-                        </td>
-                        <td>
-                            <span class="ekey-massnahme-view">{{ m.nameEigner }}</span>
-                            <input class="ekey-massnahme-edit" type="text" form="formMassnahmeBearbeiten{{ m.id }}" name="massnahmeEigner" value="{{ m.nameEigner }}">
-                        </td>
-                        <td>
-                            <form method="post" action="{{ url_for('gui.audit_massnahme_status_update', massnahme_id=m.id) }}" style="display:inline;">
-                                <select name="statusMassnahmeID" onchange="this.form.submit()">
-                                    {% for s in massnahmen_status %}
-                                    <option value="{{ s.id }}" {% if m.statusMassnahmeID|string == s.id|string %}selected{% endif %}>{{ s.statusName }}</option>
-                                    {% endfor %}
-                                </select>
-                            </form>
-                        </td>
-                        <td>
-                            <div class="ekey-actions-row ekey-massnahme-view">
-                                <button type="button" class="ekey-btn ekey-btn-small ekey-btn-mini" onclick="ekeyToggleMassnahmeEdit('{{ m.id }}')">Bearbeiten</button>
-                                <button type="button" class="ekey-btn ekey-btn-small ekey-btn-mini" onclick="ekeyOpenModal('modalMassnahmeKommentare{{ m.id }}')">Kommentieren</button>
-                                <form method="post" action="{{ url_for('gui.audit_massnahme_delete', massnahme_id=m.id) }}" style="display:inline;">
-                                    <button type="submit" class="ekey-btn ekey-btn-delete ekey-btn-mini" title="Loeschen" onclick="return confirm('Ma&szlig;nahme wirklich loeschen?');">{{ btn.delete_icon() }}</button>
-                                </form>
-                            </div>
-                            <div class="ekey-actions-row ekey-massnahme-edit">
-                                <button type="submit" form="formMassnahmeBearbeiten{{ m.id }}" class="ekey-btn ekey-btn-small ekey-btn-mini ekey-btn-primary">Speichern</button>
-                                <button type="button" class="ekey-btn ekey-btn-small ekey-btn-mini" onclick="ekeyToggleMassnahmeEdit('{{ m.id }}')">Abbrechen</button>
-                            </div>
-                            <form id="formMassnahmeBearbeiten{{ m.id }}" method="post" action="{{ url_for('gui.audit_massnahme_edit', massnahme_id=m.id) }}"></form>
-                        </td>
-                    </tr>
-                {% else %}
-                    <tr><td colspan="6">Noch keine Ma&szlig;nahme erfasst.</td></tr>
-                {% endfor %}
-                <tr id="massnahmeNeueZeile{{ a.id }}" class="ekey-massnahme-neue-zeile" style="display:none;">
-                    <td><input type="date" form="formMassnahmeNeu{{ a.id }}" name="datumErfassung" value="{{ heute }}"></td>
-                    <td><textarea form="formMassnahmeNeu{{ a.id }}" name="massnahme" rows="2"></textarea></td>
-                    <td><input type="date" form="formMassnahmeNeu{{ a.id }}" name="datumMassnahme"></td>
-                    <td><input type="text" form="formMassnahmeNeu{{ a.id }}" name="massnahmeEigner"></td>
-                    <td>-</td>
-                    <td>
-                        <div class="ekey-actions-row">
-                            <button type="submit" form="formMassnahmeNeu{{ a.id }}" class="ekey-btn ekey-btn-small ekey-btn-mini ekey-btn-primary">Speichern</button>
-                            <button type="button" class="ekey-btn ekey-btn-small ekey-btn-mini" onclick="ekeyToggleNeueMassnahmeZeile('{{ a.id }}', false)">Abbrechen</button>
-                        </div>
-                    </td>
-                </tr>
-                </tbody>
-            </table>
-            <form id="formMassnahmeNeu{{ a.id }}" method="post" action="{{ url_for('gui.audit_durchfuehren_massnahme_add', proof_id=pf.id) }}">
-                <input type="hidden" name="auditAbweichungID" value="{{ a.id }}">
-            </form>
-            <div class="ekey-form-actions" style="margin-top: 8px;">
-                <button type="button" class="ekey-btn ekey-btn-primary" onclick="ekeyToggleNeueMassnahmeZeile('{{ a.id }}', true)">Neue Ma&szlig;nahme</button>
-            </div>
-
-            {% for m in massnahmen_by_abweichung.get(a.id, []) %}
-            <div id="modalMassnahmeKommentare{{ m.id }}" class="ekey-modal-overlay{% if massnahme_kommentare_open_id and massnahme_kommentare_open_id|string == m.id|string %} ekey-modal-open{% endif %}">
-            <div class="ekey-modal ekey-modal-offset-3">
-            <div class="ekey-modal-header">
-                <h2>Kommentare - Ma&szlig;nahme #{{ m.id }}</h2>
-                <button type="button" class="ekey-modal-close" onclick="ekeyCloseModal('modalMassnahmeKommentare{{ m.id }}')" title="Schliessen">&times;</button>
-            </div>
-            <div class="ekey-modal-body">
-                <table class="ekey-table">
-                    <thead><tr><th>Datum</th><th>Name</th><th>Kommentar</th></tr></thead>
-                    <tbody>
-                    {% for k in kommentare_by_massnahme.get(m.id, []) %}
-                        <tr>
-                            <td>{{ k.kommentarDatum }}</td>
-                            <td>{{ k.name }}</td>
-                            <td class="ekey-richtext-display">{{ k.kommentar | safe }}</td>
-                        </tr>
-                    {% else %}
-                        <tr><td colspan="3">Noch kein Kommentar erfasst.</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-
-                <hr class="ekey-form-hr">
-                <h4 class="ekey-group-heading">Kommentar erfassen</h4>
-                <form method="post" action="{{ url_for('gui.audit_massnahme_kommentar_add', massnahme_id=m.id) }}">
-                    <div class="ekey-form-grid">
-                        <div class="ekey-form-row">
-                            <label for="kommentarDatum{{ m.id }}">Datum</label>
-                            <input type="date" id="kommentarDatum{{ m.id }}" name="kommentarDatum" value="{{ heute }}">
-                        </div>
-                        <div class="ekey-form-row">
-                            <label for="kommentarName{{ m.id }}">Name</label>
-                            <input type="text" id="kommentarName{{ m.id }}" name="name">
-                        </div>
-                        {{ rt.richtext_field('kommentar', 'Kommentar') }}
-                    </div>
-                    <div class="ekey-form-actions">
-                        <button type="submit" class="ekey-btn ekey-btn-primary">Speichern</button>
-                        <button type="button" class="ekey-btn" onclick="ekeyCloseModal('modalMassnahmeKommentare{{ m.id }}')">Schliessen</button>
-                    </div>
-                </form>
-            </div>
-            </div>
-            </div>
-            {% endfor %}
-
-            <hr class="ekey-form-hr">
-            <p class="ekey-muted">Abweichung: <span class="ekey-richtext-display">{{ a.abweichung | safe }}</span></p>
-        </div>
-        </div>
-        </div>
+        {% with offset_class='ekey-modal-offset-2', return_to='' %}{% include "_modal_abweichung_edit.html" %}{% endwith %}
+        {% with plan_id=plan.id, proof_id=pf.id, offset_class='ekey-modal-offset-2', offset_class_k='ekey-modal-offset-3', return_to='' %}{% include "_modal_massnahmen_plan.html" %}{% endwith %}
         {% endfor %}
         {% endif %}
     </div>

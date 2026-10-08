@@ -644,3 +644,25 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
+
+
+// Mouseover-Tooltips (.ekey-hover-tooltip): Inhalt fix am Mauszeiger/Zelle positionieren, damit er
+// auch in scrollenden PopUps nicht abgeschnitten wird.
+document.addEventListener("mouseover", function (ev) {
+  var host = ev.target.closest ? ev.target.closest(".ekey-hover-tooltip") : null;
+  if (!host) return;
+  var tip = host.querySelector(".ekey-hover-tooltip-content");
+  if (!tip) return;
+  var r = host.getBoundingClientRect();
+  tip.style.left = Math.max(4, Math.min(r.left, window.innerWidth - 440)) + "px";
+  tip.style.top = (r.bottom + 4) + "px";
+  // Platz nach unten zu knapp -> oberhalb der Zelle anzeigen
+  tip.style.visibility = "hidden";
+  tip.style.display = "block";
+  var h = tip.offsetHeight;
+  tip.style.display = "";
+  tip.style.visibility = "";
+  if (r.bottom + 4 + h > window.innerHeight && r.top - 4 - h > 0) {
+    tip.style.top = (r.top - 4 - h) + "px";
+  }
+});

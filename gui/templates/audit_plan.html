@@ -223,7 +223,7 @@
                 <td>{{ pl.datumAuditEnde }}</td>
                 <td>{{ pl.datumInterview }}</td>
                 <td>
-                    <a href="{{ url_for('gui.audit_plan', edit=pl.id, programmFilter=programm_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.audit_plan', edit=pl.id, programmFilter=programm_filter) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                     <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalChecklistePlan{{ pl.id }}')">Checkliste</button>
                     <button type="button" class="ekey-btn ekey-btn-delete" title="Loeschen"
                             onclick="ekeyConfirmDeletePlan('{{ url_for('gui.audit_plan_delete', plan_id=pl.id) }}')">{{ btn.delete_icon() }}</button>
@@ -281,7 +281,7 @@
                 <td class="ekey-richtext-display">{{ pf.auditResultInfo | safe }}</td>
                 <td>
                     <div class="ekey-actions-row">
-                        <a href="{{ url_for('gui.audit_plan', programmFilter=programm_filter, checklistePlan=pl.id, proofEdit=pf.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                        <a href="{{ url_for('gui.audit_plan', programmFilter=programm_filter, checklistePlan=pl.id, proofEdit=pf.id) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                         <form method="post" action="{{ url_for('gui.audit_plan_proof_delete', proof_id=pf.id) }}" style="display:inline">
                             <input type="hidden" name="programmFilter" value="{{ programm_filter or '' }}">
                             <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen" onclick="return confirm('Diesen Proof wirklich loeschen?');">{{ btn.delete_icon() }}</button>

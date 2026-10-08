@@ -323,6 +323,7 @@ SCHEMA_STATEMENTS = [
         nameAuditor TEXT,
         datumErfasst TEXT,
         nameEigner TEXT,
+        abweichungTitel TEXT,
         FOREIGN KEY (auditResultID) REFERENCES STG_QM_AuditResult(id),
         FOREIGN KEY (abweichungStatus) REFERENCES Look_QM_AuditStatus(id)
     )
@@ -586,6 +587,7 @@ SCHEMA_STATEMENTS_MSSQL = [
         nameAuditor NVARCHAR(255),
         datumErfasst NVARCHAR(20),
         nameEigner NVARCHAR(255),
+        abweichungTitel NVARCHAR(255),
         FOREIGN KEY (auditResultID) REFERENCES STG_QM_AuditResult(id),
         FOREIGN KEY (abweichungStatus) REFERENCES Look_QM_AuditStatus(id)
     """),
@@ -681,6 +683,7 @@ def init_db():
     _migrate_auditresult_rename_info_column()
     _migrate_massnahme_status_column()
     _migrate_massnahme_erfassungsdatum_column()
+    _migrate_abweichung_titel_column()
     _migrate_auditplanstatus_in_arbeit()
     _migrate_fix_auditplan_status_fk()
     _migrate_auditplan_prozess_to_junction()
@@ -970,6 +973,25 @@ def _migrate_massnahme_erfassungsdatum_column():
                 cur.execute("ALTER TABLE dbo.STG_QM_AuditMassnahme ADD datumErfassung NVARCHAR(20)")
             else:
                 cur.execute("ALTER TABLE STG_QM_AuditMassnahme ADD COLUMN datumErfassung TEXT")
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_abweichung_titel_column():
+    """Nachtraeglich eingefuehrte Spalte STG_QM_AuditAbweichung.abweichungTitel: Kurzbezeichnung
+    der Abweichung (Feld 'Abweichung' im PopUp 'Abweichung - Plan', Spalte 'Abweichung' in der
+    Liste 'Abweichungen') - getrennt vom ausfuehrlichen Richtext 'Beschreibung der Abweichung'
+    (Spalte abweichung) und vom Eigner (Spalte nameEigner). Bei bestehenden Datenbanken wird
+    die Spalte per ALTER TABLE ergaenzt (vorhandene Abweichungen bleiben mit leerem Titel)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if not _column_exists(cur, "STG_QM_AuditAbweichung", "abweichungTitel"):
+            if config.DB_BACKEND == "mssql":
+                cur.execute("ALTER TABLE dbo.STG_QM_AuditAbweichung ADD abweichungTitel NVARCHAR(255)")
+            else:
+                cur.execute("ALTER TABLE STG_QM_AuditAbweichung ADD COLUMN abweichungTitel TEXT")
             conn.commit()
     finally:
         conn.close()
@@ -1594,7 +1616,12 @@ def set_plan_prozesse(plan_id, prozess_ids):
 
 
 def get_audit_plan(plan_id):
-    return query("SELECT * FROM STG_QM_AuditPlan WHERE id = ?", (plan_id,), fetchone=True)
+    return query("""
+        SELECT pl.*, fb.fachbereich AS fachbereichName
+        FROM STG_QM_AuditPlan pl
+        LEFT JOIN Look_QM_Fachbereich fb ON fb.id = pl.fachbereich
+        WHERE pl.id = ?
+    """, (plan_id,), fetchone=True)
 
 
 def delete_audit_plan(plan_id):
@@ -2282,12 +2309,25 @@ def list_all_interviews():
 # Abweichungen / Massnahmen / StatusMassnahme
 # --------------------------------------------------------------------------
 
-def add_abweichung(result_id, abweichung, status_id, name_auditor, datum, name_eigner):
+def add_abweichung(result_id, abweichung, status_id, name_auditor, datum, name_eigner, titel=None):
+    """abweichung = ausfuehrlicher Richtext ('Beschreibung der Abweichung'), titel = Kurz-
+    bezeichnung ('Abweichung'), name_eigner = Eigner - drei getrennte Felder, die im PopUp
+    'Abweichung - Plan' jeweils eine eigene Spalte der Liste 'Abweichungen' haben."""
     return execute("""
         INSERT INTO STG_QM_AuditAbweichung
-        (auditResultID, abweichung, abweichungStatus, nameAuditor, datumErfasst, nameEigner)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (result_id, abweichung, status_id, name_auditor, datum, name_eigner))
+        (auditResultID, abweichung, abweichungStatus, nameAuditor, datumErfasst, nameEigner, abweichungTitel)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (result_id, abweichung, status_id, name_auditor, datum, name_eigner, titel))
+
+
+def update_abweichung(abweichung_id, abweichung, titel, name_eigner, datum):
+    """Bearbeiten einer Abweichung (Button mit Bleistift-Symbol in der Spalte [Aktion]):
+    Beschreibung (Richtext), Abweichung (Kurzbezeichnung), Eigner und Datum."""
+    execute("""
+        UPDATE STG_QM_AuditAbweichung
+        SET abweichung=?, abweichungTitel=?, nameEigner=?, datumErfasst=?
+        WHERE id=?
+    """, (abweichung, titel, name_eigner, datum, abweichung_id))
 
 
 def update_abweichung_status(abweichung_id, status_id):
@@ -2302,13 +2342,17 @@ def update_abweichung_status(abweichung_id, status_id):
 def list_abweichungen(status_filter=None, programm_filter=None, eigner_filter=None):
     sql = """
         SELECT a.*, s.auditStatus AS statusName,
-               r.antwort AS ergebnisAntwort, pf.auditFrage, pf.normKapitel,
-               pl.id AS planId, prog.id AS programmId, prog.auditJahr, prog.unternehmen
+               r.antwort AS ergebnisAntwort, pf.auditFrage, pf.normKapitel, pf.id AS proofId,
+               r.auditBewertungID, bw.auditResult AS bewertungName,
+               pl.id AS planId, fb.fachbereich AS fachbereichName,
+               prog.id AS programmId, prog.auditJahr, prog.unternehmen
         FROM STG_QM_AuditAbweichung a
         LEFT JOIN Look_QM_AuditStatus s ON s.id = a.abweichungStatus
         LEFT JOIN STG_QM_AuditResult r ON r.id = a.auditResultID
+        LEFT JOIN Look_QM_AuditBewertung bw ON bw.id = r.auditBewertungID
         LEFT JOIN STG_QM_AuditProofs pf ON pf.id = r.auditProofsId
         LEFT JOIN STG_QM_AuditPlan pl ON pl.id = pf.auditPlanId
+        LEFT JOIN Look_QM_Fachbereich fb ON fb.id = pl.fachbereich
         LEFT JOIN STG_QM_AuditProgramm prog ON prog.id = pl.auditProgrammId
     """
     clauses = []

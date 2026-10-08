@@ -70,7 +70,7 @@
                         {% if checkliste_selected_id and checkliste_selected_id|string == c.id|string %}ekey-btn-active{% endif %}">Proofs anzeigen</a>
                 </td>
                 <td>
-                    <a href="{{ url_for('gui.governance_checklisten', edit=c.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.governance_checklisten', edit=c.id) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                     <form method="post" action="{{ url_for('gui.governance_checkliste_delete', checkliste_id=c.id) }}" style="display:inline">
                         <button type="submit" class="ekey-btn ekey-btn-delete" title="Loeschen">{{ btn.delete_icon() }}</button>
                     </form>
@@ -170,7 +170,7 @@
                 <td class="ekey-richtext-display">{{ p.auditResultInfo | safe }}</td>
                 <td>
                     <div class="ekey-actions-row">
-                        <a href="{{ url_for('gui.governance_checklisten', checkliste=checkliste_selected_id, proof_edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                        <a href="{{ url_for('gui.governance_checklisten', checkliste=checkliste_selected_id, proof_edit=p.id) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                         <form method="post" action="{{ url_for('gui.governance_checklisten') }}" style="display:inline">
                             <input type="hidden" name="form_type" value="proof">
                             <input type="hidden" name="checkliste_id" value="{{ checkliste_selected_id }}">

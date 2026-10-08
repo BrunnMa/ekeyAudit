@@ -234,7 +234,7 @@ function ekeyConfirmDeleteProgramm(deleteUrl) {
                 <td>{{ p.startDatum }}</td>
                 <td>{{ p.endDatum }}</td>
                 <td>
-                    <a href="{{ url_for('gui.audit_programm', edit=p.id) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.audit_programm', edit=p.id) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                     <a href="{{ url_for('gui.audit_plan', programmFilter=p.id) }}" class="ekey-btn ekey-btn-small">zum AuditPlan</a>
                     <button type="button" class="ekey-btn ekey-btn-small" onclick="ekeyOpenModal('modalZiele{{ p.id }}')">Auditziele</button>
                 </td>

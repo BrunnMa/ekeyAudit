@@ -109,7 +109,7 @@
                 <td>{{ p.processOwner }}</td>
                 <td>{{ p.normKapitel }}</td>
                 <td>
-                    <a href="{{ url_for('gui.governance_prozesse', edit=p.id, fachbereichFilter=fachbereich_filter) }}" class="ekey-btn ekey-btn-small">Bearbeiten</a>
+                    <a href="{{ url_for('gui.governance_prozesse', edit=p.id, fachbereichFilter=fachbereich_filter) }}" class="ekey-btn ekey-btn-small ekey-btn-edit" title="Bearbeiten">{{ btn.edit_icon() }}</a>
                     <form method="post" action="{{ url_for('gui.governance_prozesse') }}" style="display:inline">
                         <input type="hidden" name="prozess_id" value="{{ p.id }}">
                         <input type="hidden" name="action" value="delete">
